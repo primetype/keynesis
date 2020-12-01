@@ -1,8 +1,10 @@
+use std::io::Write;
+
 use crate::{
+    buffer::BufRead,
     key::{ed25519::PublicKey, Key},
     noise::{HandshakeState, HandshakeStateError, TransportState},
 };
-use bytes::{Buf, BufMut};
 use rand_core::{CryptoRng, RngCore};
 
 /// Interactive Handshake [**Noise XX**]
@@ -39,7 +41,7 @@ impl<RNG> XX<RNG, A>
 where
     RNG: RngCore + CryptoRng,
 {
-    pub fn initiate(self, mut output: impl BufMut) -> Result<XX<RNG, WaitB>, HandshakeStateError> {
+    pub fn initiate(self, mut output: impl Write) -> Result<XX<RNG, WaitB>, HandshakeStateError> {
         let Self {
             mut inner,
             state: A,
@@ -57,11 +59,13 @@ where
 }
 
 impl<RNG> XX<RNG, A> {
-    pub fn receive(self, mut input: impl Buf) -> Result<XX<RNG, SendB>, HandshakeStateError> {
+    pub fn receive(self, input: &[u8]) -> Result<XX<RNG, SendB>, HandshakeStateError> {
         let Self {
             mut inner,
             state: A,
         } = self;
+
+        let mut input = BufRead::new(input);
 
         let re = inner.read_e(&mut input)?;
 
@@ -81,7 +85,7 @@ where
     pub fn reply<K: Key>(
         self,
         s: &K,
-        mut output: impl BufMut,
+        mut output: impl Write,
     ) -> Result<XX<RNG, WaitC>, HandshakeStateError> {
         let Self {
             mut inner,
@@ -103,11 +107,13 @@ where
 }
 
 impl<RNG> XX<RNG, WaitB> {
-    pub fn receive(self, mut input: impl Buf) -> Result<XX<RNG, SendC>, HandshakeStateError> {
+    pub fn receive(self, input: &[u8]) -> Result<XX<RNG, SendC>, HandshakeStateError> {
         let Self {
             mut inner,
             state: WaitB,
         } = self;
+
+        let mut input = BufRead::new(input);
 
         let re = inner.read_e(&mut input)?;
         inner.dh_ex(&re);
@@ -127,7 +133,7 @@ impl<RNG> XX<RNG, SendC> {
     pub fn reply<K: Key>(
         self,
         s: &K,
-        mut output: impl BufMut,
+        mut output: impl Write,
     ) -> Result<TransportState, HandshakeStateError> {
         let Self {
             mut inner,
@@ -152,11 +158,13 @@ impl<RNG> XX<RNG, SendC> {
 }
 
 impl<RNG> XX<RNG, WaitC> {
-    pub fn receive(self, mut input: impl Buf) -> Result<TransportState, HandshakeStateError> {
+    pub fn receive(self, input: &[u8]) -> Result<TransportState, HandshakeStateError> {
         let Self {
             mut inner,
             state: WaitC,
         } = self;
+
+        let mut input = BufRead::new(input);
 
         let rs = inner.read_s(&mut input)?;
         inner.dh_ex(&rs);

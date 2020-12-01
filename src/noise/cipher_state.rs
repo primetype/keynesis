@@ -92,11 +92,11 @@ impl CipherState {
         output: &mut [u8],
     ) -> Result<usize, CipherStateError> {
         let tag_index = plaintext.as_ref().len();
-        if tag_index + Self::TAG_LEN > output.len() {
-            return Err(CipherStateError::NotEnoughOutput);
-        }
-
         let len = if self.has_key() {
+            if tag_index + Self::TAG_LEN > output.len() {
+                return Err(CipherStateError::NotEnoughOutput);
+            }
+
             let mut ctx = ChaCha20Poly1305::new(&self.k, &self.n.to_bytes(), ad.as_ref());
 
             let mut tag = [0; Self::TAG_LEN];
@@ -118,34 +118,20 @@ impl CipherState {
         cipher_text: impl AsRef<[u8]>,
         output: &mut [u8],
     ) -> Result<(), CipherStateError> {
-        let cipher_text = cipher_text.as_ref();
-        if cipher_text.len() < Self::TAG_LEN {
-            return Err(CipherStateError::NotEnoughInput);
-        }
-
-        let tag_index = cipher_text.len() - Self::TAG_LEN;
-        if tag_index > output.len() {
-            return Err(CipherStateError::NotEnoughOutput);
-        }
-
-        let tag = &cipher_text[tag_index..tag_index + Self::TAG_LEN];
-        let cipher_text = &cipher_text[..tag_index];
-
-        self.decrypt_with_ad_(ad, cipher_text, tag, output)
-    }
-
-    fn decrypt_with_ad_(
-        &mut self,
-        ad: impl AsRef<[u8]>,
-        cipher_text: impl AsRef<[u8]>,
-        tag: &[u8],
-        output: &mut [u8],
-    ) -> Result<(), CipherStateError> {
-        if tag.len() != Self::TAG_LEN {
-            return Err(CipherStateError::NotEnoughInput);
-        }
-
         if self.has_key() {
+            let cipher_text = cipher_text.as_ref();
+            if cipher_text.len() < Self::TAG_LEN {
+                return Err(CipherStateError::NotEnoughInput);
+            }
+
+            let tag_index = cipher_text.len() - Self::TAG_LEN;
+            if tag_index > output.len() {
+                return Err(CipherStateError::NotEnoughOutput);
+            }
+
+            let tag = &cipher_text[tag_index..tag_index + Self::TAG_LEN];
+            let cipher_text = &cipher_text[..tag_index];
+
             let mut ctx = ChaCha20Poly1305::new(&self.k, &self.n.to_bytes(), ad.as_ref());
 
             if !ctx.decrypt(cipher_text.as_ref(), output, tag) {

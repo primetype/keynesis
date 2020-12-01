@@ -1,8 +1,10 @@
+use std::io::Write;
+
 use crate::{
+    buffer::BufRead,
     key::{ed25519::PublicKey, Key},
     noise::{CipherState, HandshakeState, HandshakeStateError},
 };
-use bytes::{Buf, BufMut};
 use rand_core::{CryptoRng, RngCore};
 
 /// One-Way Handshake [**Noise X**]
@@ -40,7 +42,7 @@ where
         s: &K,
         rs: &PublicKey,
         payload: impl AsRef<[u8]>,
-        mut output: impl BufMut,
+        mut output: impl Write,
     ) -> Result<(), HandshakeStateError> {
         let Self { mut inner } = self;
 
@@ -59,9 +61,11 @@ impl<RNG> X<RNG> {
     pub fn receive<K: Key>(
         self,
         s: &K,
-        mut input: impl Buf,
+        input: &[u8],
     ) -> Result<(PublicKey, Box<[u8]>), HandshakeStateError> {
         let Self { mut inner } = self;
+
+        let mut input = BufRead::new(input);
 
         let re = inner.read_e(&mut input)?;
         inner.dh_sx(s, &re);
@@ -101,7 +105,7 @@ mod tests {
 
         let input = output;
         let (decoded_sender_key, decoded_message) = receiver
-            .receive(&receiver_s, &mut input.as_slice())
+            .receive(&receiver_s, input.as_slice())
             .expect("Receive  payload one way handshake X");
 
         assert_eq!(sender_key, decoded_sender_key);

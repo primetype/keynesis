@@ -1,9 +1,10 @@
 use crate::{
+    buffer::BufRead,
     key::{ed25519::PublicKey, Key},
     noise::{HandshakeState, HandshakeStateError, TransportState},
 };
-use bytes::{Buf, BufMut};
 use rand_core::{CryptoRng, RngCore};
+use std::io::Write;
 
 /// Interactive Handshake [**Noise IK**]
 ///
@@ -41,7 +42,7 @@ where
         self,
         s: &K,
         rs: PublicKey,
-        mut output: impl BufMut,
+        mut output: impl Write,
     ) -> Result<IK<RNG, WaitB>, HandshakeStateError>
     where
         K: Key,
@@ -65,11 +66,7 @@ where
     }
 }
 impl<RNG> IK<RNG, A> {
-    pub fn receive<K>(
-        self,
-        s: &K,
-        mut input: impl Buf,
-    ) -> Result<IK<RNG, SendB>, HandshakeStateError>
+    pub fn receive<K>(self, s: &K, input: &[u8]) -> Result<IK<RNG, SendB>, HandshakeStateError>
     where
         K: Key,
     {
@@ -77,6 +74,8 @@ impl<RNG> IK<RNG, A> {
             mut inner,
             state: A,
         } = self;
+
+        let mut input = BufRead::new(input);
 
         let re = inner.read_e(&mut input)?;
         inner.dh_sx(s, &re);
@@ -99,7 +98,7 @@ where
         &self.state.rs
     }
 
-    pub fn reply(self, mut output: impl BufMut) -> Result<TransportState, HandshakeStateError> {
+    pub fn reply(self, mut output: impl Write) -> Result<TransportState, HandshakeStateError> {
         let Self {
             mut inner,
             state: SendB { re, rs },
@@ -126,11 +125,7 @@ impl<RNG> IK<RNG, WaitB> {
         &self.state.rs
     }
 
-    pub fn receive<K>(
-        self,
-        s: &K,
-        mut input: impl Buf,
-    ) -> Result<TransportState, HandshakeStateError>
+    pub fn receive<K>(self, s: &K, input: &[u8]) -> Result<TransportState, HandshakeStateError>
     where
         K: Key,
     {
@@ -138,6 +133,8 @@ impl<RNG> IK<RNG, WaitB> {
             mut inner,
             state: WaitB { rs },
         } = self;
+
+        let mut input = BufRead::new(input);
 
         let re = inner.read_e(&mut input)?;
         inner.dh_ex(&re);

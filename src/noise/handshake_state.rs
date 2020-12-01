@@ -1,12 +1,13 @@
 use crate::{
+    buffer::BufRead,
     key::{
         ed25519::{PublicKey, SecretKey},
         Key,
     },
     noise::{CipherState, CipherStateError, SymmetricState},
 };
-use bytes::{Buf, BufMut};
 use rand_core::{CryptoRng, RngCore};
+use std::io::Write;
 use thiserror::Error;
 
 pub(crate) struct HandshakeState<RNG> {
@@ -29,28 +30,27 @@ pub enum HandshakeStateError {
 
     #[error("Not enough input")]
     NotEnoughInput,
+
+    #[error("Cannot write message")]
+    Write(#[from] std::io::Error),
 }
 
 impl<RNG> HandshakeState<RNG>
 where
     RNG: RngCore + CryptoRng,
 {
-    pub(crate) fn write_e(&mut self, mut output: impl BufMut) -> Result<(), HandshakeStateError> {
-        if output.remaining_mut() < PublicKey::SIZE {
-            Err(HandshakeStateError::NotEnoughOutput)
-        } else {
-            if self.e.is_none() {
-                self.e = Some(SecretKey::new(&mut self.rng));
-            }
-            if let Some(e) = &self.e {
-                let public = e.public_key();
-                output.put_slice(public.as_ref());
-                self.symmetric_state.mix_hash(public.as_ref());
-            } else {
-                unsafe { std::hint::unreachable_unchecked() }
-            }
-            Ok(())
+    pub(crate) fn write_e(&mut self, mut output: impl Write) -> Result<(), HandshakeStateError> {
+        if self.e.is_none() {
+            self.e = Some(SecretKey::new(&mut self.rng));
         }
+        if let Some(e) = &self.e {
+            let public = e.public_key();
+            output.write_all(public.as_ref())?;
+            self.symmetric_state.mix_hash(public.as_ref());
+        } else {
+            unsafe { std::hint::unreachable_unchecked() }
+        }
+        Ok(())
     }
 }
 
@@ -70,12 +70,23 @@ impl<RNG> HandshakeState<RNG> {
         &self.symmetric_state
     }
 
-    pub(crate) fn read_e(&mut self, mut input: impl Buf) -> Result<PublicKey, HandshakeStateError> {
+    fn encrypted_len(&self, len: usize) -> usize {
+        if self.symmetric_state.has_key() {
+            len + CipherState::TAG_LEN
+        } else {
+            len
+        }
+    }
+
+    pub(crate) fn read_e(
+        &mut self,
+        input: &mut BufRead<'_>,
+    ) -> Result<PublicKey, HandshakeStateError> {
         if input.remaining() < PublicKey::SIZE {
             Err(HandshakeStateError::ExpectingPublicKey)
         } else {
             let mut pk = [0; PublicKey::SIZE];
-            input.copy_to_slice(&mut pk);
+            input.read(&mut pk);
             self.symmetric_state.mix_hash(&pk);
             Ok(PublicKey::from(pk))
         }
@@ -84,26 +95,28 @@ impl<RNG> HandshakeState<RNG> {
     pub(crate) fn write_s(
         &mut self,
         s: &PublicKey,
-        mut output: impl BufMut,
+        mut output: impl Write,
     ) -> Result<(), HandshakeStateError> {
-        if output.remaining_mut() < PublicKey::SIZE + CipherState::TAG_LEN {
-            Err(HandshakeStateError::NotEnoughOutput)
-        } else {
-            let mut pk = [0; PublicKey::SIZE + CipherState::TAG_LEN];
-            self.symmetric_state.encrypt_and_hash(s.as_ref(), &mut pk)?;
-            output.put_slice(&pk);
-            Ok(())
-        }
+        let len = self.encrypted_len(PublicKey::SIZE);
+        let mut pk = [0; PublicKey::SIZE + CipherState::TAG_LEN];
+        self.symmetric_state
+            .encrypt_and_hash(s.as_ref(), &mut pk[..len])?;
+        output.write_all(&pk[..len])?;
+        Ok(())
     }
 
-    pub(crate) fn read_s(&mut self, mut input: impl Buf) -> Result<PublicKey, HandshakeStateError> {
-        if input.remaining() < PublicKey::SIZE + CipherState::TAG_LEN {
+    pub(crate) fn read_s(
+        &mut self,
+        input: &mut BufRead<'_>,
+    ) -> Result<PublicKey, HandshakeStateError> {
+        let len = self.encrypted_len(PublicKey::SIZE);
+        if input.remaining() < len {
             Err(HandshakeStateError::NotEnoughInput)
         } else {
-            let mut temp = [0; PublicKey::SIZE + CipherState::TAG_LEN];
-            input.copy_to_slice(&mut temp);
             let mut pk = [0; PublicKey::SIZE];
-            self.symmetric_state.decrypt_and_hash(&temp, &mut pk)?;
+            self.symmetric_state
+                .decrypt_and_hash(&input.slice(len), &mut pk)?;
+            input.advance(len);
             Ok(PublicKey::from(pk))
         }
     }
@@ -111,32 +124,27 @@ impl<RNG> HandshakeState<RNG> {
     pub(crate) fn encrypt_and_hash(
         &mut self,
         plaintext: &[u8],
-        mut output: impl BufMut,
+        mut output: impl Write,
     ) -> Result<(), HandshakeStateError> {
-        if output.remaining_mut() < plaintext.len() + CipherState::TAG_LEN {
-            Err(HandshakeStateError::NotEnoughOutput)
-        } else {
-            let mut tag = vec![0; plaintext.len() + CipherState::TAG_LEN];
-            self.symmetric_state.encrypt_and_hash(plaintext, &mut tag)?;
-            output.put_slice(&tag);
-            Ok(())
-        }
+        let mut buffer = [0; u16::MAX as usize];
+        let len = self.encrypted_len(plaintext.len());
+        let mut tag = &mut buffer[..len];
+        let len = self.symmetric_state.encrypt_and_hash(plaintext, &mut tag)?;
+        output.write_all(&buffer[..len])?;
+        Ok(())
     }
 
     pub(crate) fn decrypt_and_hash(
         &mut self,
-        mut input: impl Buf,
+        input: &mut BufRead,
         output: &mut [u8],
     ) -> Result<(), HandshakeStateError> {
-        if input.remaining() < output.len() + CipherState::TAG_LEN {
-            Err(HandshakeStateError::NotEnoughInput)
-        } else {
-            let mut cipher_text = vec![0; output.len() + CipherState::TAG_LEN];
-            input.copy_to_slice(&mut cipher_text);
-            self.symmetric_state.decrypt_and_hash(cipher_text, output)?;
+        let len = input.remaining();
+        self.symmetric_state
+            .decrypt_and_hash(input.slice(len), output)?;
+        input.advance(len);
 
-            Ok(())
-        }
+        Ok(())
     }
 
     pub(crate) fn dh_ex(&mut self, re: &PublicKey) {

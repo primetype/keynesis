@@ -1,3 +1,4 @@
+#![cfg(feature = "nightly")]
 #![feature(test)]
 
 extern crate test;
@@ -15,7 +16,7 @@ fn ik(b: &mut Bencher) {
     let initiator_secret_key = SecretKey::new(&mut rng);
     let responder_secret_key = SecretKey::new(&mut rng);
 
-    let (mut first_msg, mut second_msg) = ([0u8; 1024], [0u8; 1024]);
+    let (mut first_msg, mut second_msg) = (Vec::with_capacity(1024), Vec::with_capacity(1024));
 
     b.iter(|| {
         let initiator = IK::new(&mut rng1, &[]);
@@ -26,7 +27,7 @@ fn ik(b: &mut Bencher) {
             .initiate(
                 &initiator_secret_key,
                 responder_secret_key.public_key(),
-                &mut first_msg.as_mut(),
+                &mut first_msg,
             )
             .unwrap();
 
@@ -36,11 +37,14 @@ fn ik(b: &mut Bencher) {
             .unwrap();
 
         // <- e, ee, se
-        responder.reply(second_msg.as_mut()).unwrap();
+        responder.reply(&mut second_msg).unwrap();
 
         // initiator processes the response...
         initiator
             .receive(&initiator_secret_key, second_msg.as_ref())
             .unwrap();
+
+        first_msg.clear();
+        second_msg.clear();
     });
 }

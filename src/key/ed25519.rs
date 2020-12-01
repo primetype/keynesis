@@ -178,15 +178,7 @@ impl Debug for SecretKey {
 #[cfg(not(test))]
 impl Debug for SecretKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        #[cfg(feature = "nightly")]
-        {
-            f.debug_tuple("SecretKey<Ed25519>").finish_non_exhaustive()
-        }
-
-        #[cfg(not(feature = "nightly"))]
-        {
-            f.debug_tuple("SecretKey<Ed25519>").field(&"...").finish()
-        }
+        f.debug_tuple("SecretKey<Ed25519>").field(&"...").finish()
     }
 }
 

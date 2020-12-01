@@ -36,18 +36,9 @@ impl Debug for SharedSecret {
 #[cfg(not(test))]
 impl Debug for SharedSecret {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        #[cfg(feature = "nightly")]
-        {
-            f.debug_tuple("SharedSecret<Ed25519>")
-                .finish_non_exhaustive()
-        }
-
-        #[cfg(not(feature = "nightly"))]
-        {
-            f.debug_tuple("SharedSecret<Ed25519>")
-                .field(&"...")
-                .finish()
-        }
+        f.debug_tuple("SharedSecret<Ed25519>")
+            .field(&"...")
+            .finish()
     }
 }
 

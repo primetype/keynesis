@@ -11,6 +11,7 @@ and APIs to use for different purpose
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
 
+mod buffer;
 pub mod key;
 pub mod memsec;
 pub mod noise;

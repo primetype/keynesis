@@ -1,4 +1,3 @@
-#[cfg(not(feature = "nightly"))]
 use std::ptr;
 
 pub trait Scrubbed {
@@ -18,16 +17,8 @@ pub trait Scrubbed {
 /// and ready to use.
 #[inline(never)]
 pub unsafe fn memset(dst: *mut u8, val: u8, count: usize) {
-    #[cfg(feature = "nightly")]
-    {
-        core::intrinsics::volatile_set_memory(dst, val, count);
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    {
-        for i in 0..count {
-            ptr::write_volatile(dst.add(i), val);
-        }
+    for i in 0..count {
+        ptr::write_volatile(dst.add(i), val);
     }
 }
 

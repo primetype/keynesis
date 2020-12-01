@@ -22,6 +22,10 @@ impl SymmetricState {
     pub const HASH_LEN: usize = 64;
     pub const BLOCK_LEN: usize = 128;
 
+    pub fn has_key(&self) -> bool {
+        self.cipher_state.has_key()
+    }
+
     pub fn initialize_symmetric(protocol_name: impl AsRef<[u8]>) -> Self {
         let protocol_name = protocol_name.as_ref();
         let mut h = [0; Self::HASH_LEN];
@@ -103,7 +107,7 @@ impl SymmetricState {
         let size = self
             .cipher_state
             .encrypt_with_ad(&self.h, plaintext, output)?;
-        self.mix_hash(&output[..]);
+        self.mix_hash(&output);
         Ok(size)
     }
 
