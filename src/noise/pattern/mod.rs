@@ -16,5 +16,8 @@ how you can leverage that.
 [Noise Explorer]: https://noiseexplorer.com/patterns/
 */
 pub mod ik;
+pub mod ix;
+pub mod x;
+pub mod xx;
 
-pub use self::ik::IK;
+pub use self::{ik::IK, ix::IX, x::X, xx::XX};
