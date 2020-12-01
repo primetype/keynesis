@@ -103,12 +103,8 @@ impl SecretKey {
     ///
     /// be mindful that leaking the content of the internal signing key
     /// may result in losing the ultimate control of the signing key
-    pub fn leak_as_ref(&self) -> &[u8; Self::SIZE] {
+    pub(crate) fn leak_as_ref(&self) -> &[u8; Self::SIZE] {
         &self.0
-    }
-
-    pub fn leak_to_hex(&self) -> String {
-        hex::encode(self.0.as_ref())
     }
 }
 
@@ -129,8 +125,8 @@ fn edwards_to_montgomery_x(ed_y: &Fe) -> Fe {
 #[cfg(test)]
 impl Debug for SecretKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SecretKey<Ed25519Extended>")
-            .field("0", &hex::encode(&self.0[..]))
+        f.debug_tuple("SecretKey<Ed25519Extended>")
+            .field(&hex::encode(&self.0[..]))
             .finish()
     }
 }
@@ -142,14 +138,14 @@ impl Debug for SecretKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         #[cfg(feature = "nightly")]
         {
-            f.debug_struct("SecretKey<Ed25519Extended>")
+            f.debug_tuple("SecretKey<Ed25519Extended>")
                 .finish_non_exhaustive()
         }
 
         #[cfg(not(feature = "nightly"))]
         {
-            f.debug_struct("SecretKey<Ed25519Extended>")
-                .field("0", &"...")
+            f.debug_tuple("SecretKey<Ed25519Extended>")
+                .field(&"...")
                 .finish()
         }
     }
@@ -290,22 +286,6 @@ mod tests {
             Err(SecretKeyError::InvalidStructure) => {
                 TestResult::error("was expecting an invalid size error, not an invalid structure")
             }
-        }
-    }
-
-    #[quickcheck]
-    fn signing_key_from_str(signing_key: SecretKey) -> TestResult {
-        let s = signing_key.leak_to_hex();
-
-        match s.parse::<SecretKey>() {
-            Ok(decoded) => {
-                if decoded == signing_key {
-                    TestResult::passed()
-                } else {
-                    TestResult::error("the decoded key is not equal")
-                }
-            }
-            Err(error) => TestResult::error(error.to_string()),
         }
     }
 

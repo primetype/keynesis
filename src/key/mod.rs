@@ -1,5 +1,5 @@
 /*!
-# Keynesis's Keys
+# Keynesis Keys
 
 This module defines some kind of keys that can be used for signing,
 for deriving a shared secret between 2 keys or building a hierarchical
@@ -80,4 +80,46 @@ pub mod ed25519_extended;
 pub mod ed25519_hd;
 mod shared_secret;
 
-pub use shared_secret::SharedSecret;
+pub use self::shared_secret::SharedSecret;
+
+pub trait Key {
+    fn public(&self) -> ed25519::PublicKey;
+
+    fn dh(&self, public: &ed25519::PublicKey) -> SharedSecret;
+}
+
+impl Key for ed25519::SecretKey {
+    #[inline]
+    fn public(&self) -> ed25519::PublicKey {
+        self.public_key()
+    }
+
+    #[inline]
+    fn dh(&self, public: &ed25519::PublicKey) -> SharedSecret {
+        self.exchange(public)
+    }
+}
+
+impl Key for ed25519_extended::SecretKey {
+    #[inline]
+    fn public(&self) -> ed25519::PublicKey {
+        self.public_key()
+    }
+
+    #[inline]
+    fn dh(&self, public: &ed25519::PublicKey) -> SharedSecret {
+        self.exchange(public)
+    }
+}
+
+impl Key for ed25519_hd::SecretKey {
+    #[inline]
+    fn public(&self) -> ed25519::PublicKey {
+        *self.public_key().key()
+    }
+
+    #[inline]
+    fn dh(&self, public: &ed25519::PublicKey) -> SharedSecret {
+        self.key().exchange(public)
+    }
+}

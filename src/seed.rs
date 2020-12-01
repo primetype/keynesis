@@ -1,10 +1,10 @@
+use crate::memsec::Scrubbed as _;
 use cryptoxide::{hmac::Hmac, pbkdf2::pbkdf2, sha2::Sha512};
 use rand_chacha::ChaChaRng;
 use rand_core::{CryptoRng, RngCore, SeedableRng};
-use crate::memsec::Scrubbed as _;
 use std::{
     fmt::{self, Debug, Display, Formatter},
-    str::FromStr
+    str::FromStr,
 };
 
 #[derive(Clone)]
@@ -36,7 +36,11 @@ impl Seed {
     /// empty. However, the key needs to be large enough to generate
     /// enough entropy for the derived seed.
     ///
-    /// This function uses HMAC PBKDF2 SHA512 with `10_000` iteration
+    /// This function uses HMAC PBKDF2 SHA512 with up to `100_000_000` iterations
+    /// if the key is less than 4 bytes... down to `390_625` iteration
+    /// from 32bytes long keys onward.
+    ///
+    /// the operation is therefor very slow to execute, especially with small sized keys.
     pub fn derive_from_key<K, P>(key: K, password: P) -> Self
     where
         K: AsRef<[u8]>,
@@ -52,7 +56,12 @@ impl Seed {
         Self(bytes)
     }
 
-    pub(crate) fn into_rand_chacha(self) -> ChaChaRng {
+    /// use this to seed a ChaCha RNG
+    ///
+    /// then you can use the RNG to create new private key. This is an
+    /// handy way to derive a private key from a key and a password
+    /// (or an HSM and a password?)
+    pub fn into_rand_chacha(self) -> ChaChaRng {
         ChaChaRng::from_seed(self.0)
     }
 }
@@ -71,9 +80,13 @@ impl Display for Seed {
 
 impl Debug for Seed {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Seed")
-        .field("0", &hex::encode(&self.0))
-        .finish()
+        f.debug_tuple("Seed").field(&hex::encode(&self.0)).finish()
+    }
+}
+
+impl AsRef<[u8]> for Seed {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
 
@@ -93,5 +106,66 @@ impl From<[u8; Self::SIZE]> for Seed {
 }
 
 fn iteration(n: u32) -> u32 {
-    10_000_000u32.wrapping_div_euclid(10u32.saturating_pow(n.div_euclid(8)))
+    let n = std::cmp::min(n, 32);
+    100_000_000u32.wrapping_div_euclid(2u32.saturating_pow(n.div_euclid(4)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quickcheck::{Arbitrary, Gen};
+
+    impl Arbitrary for Seed {
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+            let mut bytes = [0; Self::SIZE];
+            g.fill_bytes(&mut bytes);
+            Self(bytes)
+        }
+    }
+
+    #[test]
+    fn iterations() {
+        assert_eq!(iteration(0), 100_000_000);
+        assert_eq!(iteration(1), 100_000_000);
+        assert_eq!(iteration(2), 100_000_000);
+        assert_eq!(iteration(3), 100_000_000);
+        assert_eq!(iteration(4), 50_000_000);
+        assert_eq!(iteration(5), 50_000_000);
+        assert_eq!(iteration(6), 50_000_000);
+        assert_eq!(iteration(7), 50_000_000);
+        assert_eq!(iteration(8), 25_000_000);
+        assert_eq!(iteration(9), 25_000_000);
+        assert_eq!(iteration(10), 25_000_000);
+        assert_eq!(iteration(11), 25_000_000);
+        assert_eq!(iteration(12), 12_500_000);
+        assert_eq!(iteration(13), 12_500_000);
+        assert_eq!(iteration(14), 12_500_000);
+        assert_eq!(iteration(15), 12_500_000);
+        assert_eq!(iteration(16), 6_250_000);
+        assert_eq!(iteration(17), 6_250_000);
+        assert_eq!(iteration(18), 6_250_000);
+        assert_eq!(iteration(19), 6_250_000);
+        assert_eq!(iteration(20), 3_125_000);
+        assert_eq!(iteration(21), 3_125_000);
+        assert_eq!(iteration(22), 3_125_000);
+        assert_eq!(iteration(23), 3_125_000);
+        assert_eq!(iteration(24), 1_562_500);
+        assert_eq!(iteration(25), 1_562_500);
+        assert_eq!(iteration(26), 1_562_500);
+        assert_eq!(iteration(27), 1_562_500);
+        assert_eq!(iteration(28), 781_250);
+        assert_eq!(iteration(29), 781_250);
+        assert_eq!(iteration(30), 781_250);
+        assert_eq!(iteration(31), 781_250);
+        assert_eq!(iteration(32), 390_625);
+    }
+
+    #[quickcheck]
+    fn iteration_greater_then_32_bytes(i: u32) -> quickcheck::TestResult {
+        if i <= 32 {
+            quickcheck::TestResult::discard()
+        } else {
+            quickcheck::TestResult::from_bool(iteration(i) == iteration(32))
+        }
+    }
 }

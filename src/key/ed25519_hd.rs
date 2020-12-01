@@ -101,6 +101,11 @@ impl SecretKey {
         &self.chain_code
     }
 
+    /// Access the actual secret key to do key exchange or signing
+    ///
+    /// HD Secret keys are composed of both an extended secret key and
+    /// a chain code. This function gives access to the secret key without
+    /// the chaincode
     pub fn key(&self) -> &ed25519_extended::SecretKey {
         &self.key
     }
@@ -109,15 +114,14 @@ impl SecretKey {
         self.key
     }
 
-    pub fn leak_to_hex(&self) -> String {
-        format!("{}{}", self.key.leak_to_hex(), self.chain())
-    }
-
     /// generate a shared secret between the owner of the given public key and
     /// ourselves.
     ///
-    pub fn exchange(&self, public_key: &PublicKey) -> SharedSecret {
-        self.key.exchange(public_key)
+    pub fn exchange<P>(&self, public_key: &P) -> SharedSecret
+    where
+        P: AsRef<ed25519_extended::PublicKey>,
+    {
+        self.key.exchange(public_key.as_ref())
     }
 
     /// create a `Signature` for the given message with this `SecretKey`.
@@ -180,6 +184,10 @@ impl SecretKey {
 
 impl PublicKey {
     pub const SIZE: usize = ed25519_extended::PublicKey::SIZE + ChainCode::SIZE;
+
+    pub fn from_parts(key: ed25519_extended::PublicKey, chain_code: ChainCode) -> Self {
+        Self { key, chain_code }
+    }
 
     pub fn key(&self) -> &ed25519_extended::PublicKey {
         &self.key
@@ -297,8 +305,8 @@ impl Deref for PublicKey {
 
 impl Debug for ChainCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ChainCode")
-            .field("0", &hex::encode(&self.0))
+        f.debug_tuple("ChainCode")
+            .field(&hex::encode(&self.0))
             .finish()
     }
 }
@@ -504,6 +512,12 @@ impl AsRef<[u8]> for ChainCode {
     }
 }
 
+impl AsRef<ed25519_extended::PublicKey> for PublicKey {
+    fn as_ref(&self) -> &ed25519_extended::PublicKey {
+        self.key()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -655,22 +669,6 @@ mod tests {
                 "Expecting to fail with invalid size instead of having a valid value",
             ),
             Err(ChainCodeError::InvalidSize) => TestResult::passed(),
-        }
-    }
-
-    #[quickcheck]
-    fn signing_key_from_str(signing_key: SecretKey) -> TestResult {
-        let s = signing_key.leak_to_hex();
-
-        match s.parse::<SecretKey>() {
-            Ok(decoded) => {
-                if decoded == signing_key {
-                    TestResult::passed()
-                } else {
-                    TestResult::error("the decoded key is not equal")
-                }
-            }
-            Err(error) => TestResult::error(error.to_string()),
         }
     }
 

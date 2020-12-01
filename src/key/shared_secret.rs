@@ -12,7 +12,12 @@ pub struct SharedSecret([u8; 32]);
 impl SharedSecret {
     pub const SIZE: usize = 32;
 
-    pub(crate) const fn new(shared_secret: [u8; 32]) -> Self {
+    /// create a shared secret from the given bytes
+    ///
+    /// To use only as a constructor if receiving the shared secret
+    /// from a HSM or a secure enclave. Otherwise use the exchange
+    /// function on the associate private/secret keys
+    pub const fn new(shared_secret: [u8; 32]) -> Self {
         Self(shared_secret)
     }
 }
@@ -22,8 +27,8 @@ impl SharedSecret {
 #[cfg(test)]
 impl Debug for SharedSecret {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SharedSecret<Ed25519>")
-            .field("0", &hex::encode(&self.0))
+        f.debug_tuple("SharedSecret<Ed25519>")
+            .field(&hex::encode(&self.0))
             .finish()
     }
 }
@@ -33,14 +38,14 @@ impl Debug for SharedSecret {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         #[cfg(feature = "nightly")]
         {
-            f.debug_struct("SharedSecret<Ed25519>")
+            f.debug_tuple("SharedSecret<Ed25519>")
                 .finish_non_exhaustive()
         }
 
         #[cfg(not(feature = "nightly"))]
         {
-            f.debug_struct("SharedSecret<Ed25519>")
-                .field("0", &"...")
+            f.debug_tuple("SharedSecret<Ed25519>")
+                .field(&"...")
                 .finish()
         }
     }
