@@ -77,10 +77,6 @@ impl CipherState {
         self.k != [0; 32]
     }
 
-    pub fn set_nonce(&mut self, nonce: Nonce) {
-        self.n = nonce;
-    }
-
     pub(crate) fn nonce(&self) -> &Nonce {
         &self.n
     }
