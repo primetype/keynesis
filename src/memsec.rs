@@ -1,5 +1,13 @@
+/*!
+# Memsec utility functions
+
+Most of the types defined here implements `Scrubbed` trait.
+*/
+
 use std::ptr;
 
+/// Types implementing this can be scrubbed, the memory is cleared and
+/// erased with a dummy value.
 pub trait Scrubbed {
     fn scrub(&mut self);
 }
@@ -113,3 +121,33 @@ impl_scrubbed_array!([u8; 256]);
 impl_scrubbed_array!([u8; 512]);
 impl_scrubbed_array!([u8]);
 impl_scrubbed_array!(str);
+
+impl<T: Scrubbed> Scrubbed for Option<T> {
+    fn scrub(&mut self) {
+        self.as_mut().map(Scrubbed::scrub);
+    }
+}
+
+impl<T: Scrubbed> Scrubbed for Vec<T> {
+    fn scrub(&mut self) {
+        self.iter_mut().for_each(Scrubbed::scrub)
+    }
+}
+
+impl<T: Scrubbed> Scrubbed for Box<T> {
+    fn scrub(&mut self) {
+        self.as_mut().scrub()
+    }
+}
+
+impl<T: Scrubbed> Scrubbed for std::cell::Cell<T> {
+    fn scrub(&mut self) {
+        self.get_mut().scrub()
+    }
+}
+
+impl<T: Scrubbed> Scrubbed for std::cell::RefCell<T> {
+    fn scrub(&mut self) {
+        self.get_mut().scrub()
+    }
+}
