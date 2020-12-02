@@ -1,4 +1,4 @@
-/**
+/*!
 # Noise Handshake patterns
 
 Here are implemented a few of the handshakes available from the noise protocol.
