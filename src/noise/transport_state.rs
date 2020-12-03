@@ -90,3 +90,47 @@ impl<H: Hash> TransportState<H> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    pub fn test_transport<H: Hash>(
+        mut initiator: TransportState<H>,
+        mut responder: TransportState<H>,
+        messages_init_to_responder: Vec<Vec<u8>>,
+        messages_resp_to_initiator: Vec<Vec<u8>>,
+    ) -> bool {
+        for message in messages_init_to_responder {
+            let mut output = vec![0; message.len() + CipherState::TAG_LEN];
+            initiator
+                .send(&message, &mut output)
+                .expect("send encrypted message");
+
+            let input = output;
+            let mut output = vec![0; message.len()];
+            responder
+                .receive(&input, &mut output)
+                .expect("receive message");
+
+            assert!(message == output, "decryption of the message failed")
+        }
+
+        for message in messages_resp_to_initiator {
+            let mut output = vec![0; message.len() + CipherState::TAG_LEN];
+            responder
+                .send(&message, &mut output)
+                .expect("send encrypted message");
+
+            let input = output;
+            let mut output = vec![0; message.len()];
+            initiator
+                .receive(&input, &mut output)
+                .expect("receive message");
+
+            assert!(message == output, "decryption of the message failed")
+        }
+
+        true
+    }
+}

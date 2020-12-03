@@ -222,15 +222,18 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{key::ed25519_extended::SecretKey, noise::CipherState};
-    use cryptoxide::blake2b::Blake2b;
+    use crate::{
+        key::{curve25519, ed25519, ed25519_extended, ed25519_hd},
+        noise::transport_state::tests::test_transport,
+    };
+    use cryptoxide::{blake2b::Blake2b, blake2s::Blake2s};
 
-    fn establish_handshake(
+    fn establish_handshake<H: Hash, K1: Dh, K2: Dh>(
         rng1: crate::Seed,
         rng2: crate::Seed,
-        initiator_s: SecretKey,
-        responder_s: SecretKey,
-    ) -> (TransportState<Blake2b>, TransportState<Blake2b>) {
+        initiator_s: K1,
+        responder_s: K2,
+    ) -> (TransportState<H>, TransportState<H>) {
         let initiator_key = initiator_s.public();
         let responder_key = responder_s.public();
 
@@ -273,48 +276,151 @@ mod tests {
         (initiator, responder)
     }
 
-    #[quickcheck]
-    fn full_round(
-        rng1: crate::Seed,
-        rng2: crate::Seed,
-        initiator_s: SecretKey,
-        responder_s: SecretKey,
-        messages_init_to_responder: Vec<Vec<u8>>,
-        messages_resp_to_initiator: Vec<Vec<u8>>,
-    ) -> bool {
-        let (mut initiator, mut responder) =
-            establish_handshake(rng1, rng2, initiator_s, responder_s);
+    macro_rules! mk_test {
+        ($name:ident, $sk1:ty, $sk2:ty, $hash:ty) => {
+            #[quickcheck]
+            fn $name(
+                rng1: crate::Seed,
+                rng2: crate::Seed,
+                initiator_s: $sk1,
+                responder_s: $sk2,
+                messages_init_to_responder: Vec<Vec<u8>>,
+                messages_resp_to_initiator: Vec<Vec<u8>>,
+            ) -> bool {
+                let (initiator, responder) =
+                    establish_handshake(rng1, rng2, initiator_s, responder_s);
 
-        for message in messages_init_to_responder {
-            let mut output = vec![0; message.len() + CipherState::TAG_LEN];
-            initiator
-                .send(&message, &mut output)
-                .expect("send encrypted message");
-
-            let input = output;
-            let mut output = vec![0; message.len()];
-            responder
-                .receive(&input, &mut output)
-                .expect("receive message");
-
-            assert!(message == output, "decryption of the message failed")
-        }
-
-        for message in messages_resp_to_initiator {
-            let mut output = vec![0; message.len() + CipherState::TAG_LEN];
-            responder
-                .send(&message, &mut output)
-                .expect("send encrypted message");
-
-            let input = output;
-            let mut output = vec![0; message.len()];
-            initiator
-                .receive(&input, &mut output)
-                .expect("receive message");
-
-            assert!(message == output, "decryption of the message failed")
-        }
-
-        true
+                test_transport::<$hash>(
+                    initiator,
+                    responder,
+                    messages_init_to_responder,
+                    messages_resp_to_initiator,
+                )
+            }
+        };
     }
+
+    mk_test!(
+        curve25519_to_curve25519_blake2b,
+        curve25519::SecretKey,
+        curve25519::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        curve25519_to_curve25519_blake2s,
+        curve25519::SecretKey,
+        curve25519::SecretKey,
+        Blake2s
+    );
+
+    mk_test!(
+        ed25519_to_ed25519_blake2b,
+        ed25519::SecretKey,
+        ed25519::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        ed25519_to_ed25519_blake2s,
+        ed25519::SecretKey,
+        ed25519::SecretKey,
+        Blake2s
+    );
+    mk_test!(
+        ed25519_to_ed25519_extended_blake2b,
+        ed25519::SecretKey,
+        ed25519_extended::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        ed25519_to_ed25519_extended_blake2s,
+        ed25519::SecretKey,
+        ed25519_extended::SecretKey,
+        Blake2s
+    );
+    mk_test!(
+        ed25519_to_ed25519_hd_blake2b,
+        ed25519::SecretKey,
+        ed25519_hd::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        ed25519_to_ed25519_hd_blake2s,
+        ed25519::SecretKey,
+        ed25519_hd::SecretKey,
+        Blake2s
+    );
+
+    mk_test!(
+        ed25519_extended_to_ed25519_blake2b,
+        ed25519_extended::SecretKey,
+        ed25519::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        ed25519_extended_to_ed25519_blake2s,
+        ed25519_extended::SecretKey,
+        ed25519::SecretKey,
+        Blake2s
+    );
+    mk_test!(
+        ed25519_extended_to_ed25519_extended_blake2b,
+        ed25519_extended::SecretKey,
+        ed25519_extended::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        ed25519_extended_to_ed25519_extended_blake2s,
+        ed25519_extended::SecretKey,
+        ed25519_extended::SecretKey,
+        Blake2s
+    );
+    mk_test!(
+        ed25519_extended_to_ed25519_hd_blake2b,
+        ed25519_extended::SecretKey,
+        ed25519_hd::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        ed25519_extended_to_ed25519_hd_blake2s,
+        ed25519_extended::SecretKey,
+        ed25519_hd::SecretKey,
+        Blake2s
+    );
+
+    mk_test!(
+        ed25519_hd_to_ed25519_blake2b,
+        ed25519_hd::SecretKey,
+        ed25519::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        ed25519_hd_to_ed25519_blake2s,
+        ed25519_hd::SecretKey,
+        ed25519::SecretKey,
+        Blake2s
+    );
+    mk_test!(
+        ed25519_hd_to_ed25519_extended_blake2b,
+        ed25519_hd::SecretKey,
+        ed25519_extended::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        ed25519_hd_to_ed25519_extended_blake2s,
+        ed25519_hd::SecretKey,
+        ed25519_extended::SecretKey,
+        Blake2s
+    );
+    mk_test!(
+        ed25519_hd_to_ed25519_hd_blake2b,
+        ed25519_hd::SecretKey,
+        ed25519_hd::SecretKey,
+        Blake2b
+    );
+    mk_test!(
+        ed25519_hd_to_ed25519_hd_blake2s,
+        ed25519_hd::SecretKey,
+        ed25519_hd::SecretKey,
+        Blake2s
+    );
 }
