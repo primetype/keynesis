@@ -1,6 +1,6 @@
 [package]
 name = "keynesis"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Nicolas Di Prima <nicolas@primetype.co.uk>"]
 edition = "2018"
 readme = "README.md"
