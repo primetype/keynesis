@@ -2,7 +2,8 @@ use std::io::Write;
 
 use crate::{
     buffer::BufRead,
-    key::{ed25519::PublicKey, Key},
+    hash::Hash,
+    key::{ed25519::PublicKey, Dh},
     noise::{HandshakeState, HandshakeStateError, TransportState},
 };
 use rand_core::{CryptoRng, RngCore};
@@ -10,8 +11,11 @@ use rand_core::{CryptoRng, RngCore};
 /// Interactive Handshake [**Noise XX**]
 ///
 /// [**Noise XX**]: https://noiseexplorer.com/patterns/XX/
-pub struct XX<RNG, S> {
-    inner: HandshakeState<RNG>,
+pub struct XX<DH, H, RNG, S>
+where
+    H: Hash,
+{
+    inner: HandshakeState<RNG, DH, H>,
     state: S,
 }
 
@@ -26,22 +30,37 @@ pub struct SendC {
     rs: PublicKey,
 }
 
-impl<RNG> XX<RNG, A> {
-    pub const PROTOCOL_NAME: &'static str = "Noise_XX_25519_ChaChaPoly_BLAKE2b";
-
+impl<DH, H, RNG> XX<DH, H, RNG, A>
+where
+    DH: Dh,
+    H: Hash,
+{
     pub fn new(rng: RNG, prologue: &[u8]) -> Self {
+        let protocol_name = format!(
+            "Noise_{pattern}_{dh}_{cipher}_{hash}",
+            pattern = "XX",
+            dh = DH::name(),
+            cipher = "ChaChaPoly",
+            hash = H::name(),
+        );
+
         Self {
-            inner: HandshakeState::new(rng, prologue, Self::PROTOCOL_NAME),
+            inner: HandshakeState::new(rng, prologue, &protocol_name),
             state: A,
         }
     }
 }
 
-impl<RNG> XX<RNG, A>
+impl<DH, H, RNG> XX<DH, H, RNG, A>
 where
     RNG: RngCore + CryptoRng,
+    DH: Dh,
+    H: Hash,
 {
-    pub fn initiate(self, mut output: impl Write) -> Result<XX<RNG, WaitB>, HandshakeStateError> {
+    pub fn initiate(
+        self,
+        mut output: impl Write,
+    ) -> Result<XX<DH, H, RNG, WaitB>, HandshakeStateError> {
         let Self {
             mut inner,
             state: A,
@@ -58,8 +77,12 @@ where
     }
 }
 
-impl<RNG> XX<RNG, A> {
-    pub fn receive(self, input: &[u8]) -> Result<XX<RNG, SendB>, HandshakeStateError> {
+impl<DH, H, RNG> XX<DH, H, RNG, A>
+where
+    DH: Dh,
+    H: Hash,
+{
+    pub fn receive(self, input: &[u8]) -> Result<XX<DH, H, RNG, SendB>, HandshakeStateError> {
         let Self {
             mut inner,
             state: A,
@@ -78,15 +101,17 @@ impl<RNG> XX<RNG, A> {
     }
 }
 
-impl<RNG> XX<RNG, SendB>
+impl<DH, H, RNG> XX<DH, H, RNG, SendB>
 where
     RNG: RngCore + CryptoRng,
+    DH: Dh,
+    H: Hash,
 {
-    pub fn reply<K: Key>(
+    pub fn reply(
         self,
-        s: &K,
+        s: &DH,
         mut output: impl Write,
-    ) -> Result<XX<RNG, WaitC>, HandshakeStateError> {
+    ) -> Result<XX<DH, H, RNG, WaitC>, HandshakeStateError> {
         let Self {
             mut inner,
             state: SendB { re },
@@ -106,8 +131,12 @@ where
     }
 }
 
-impl<RNG> XX<RNG, WaitB> {
-    pub fn receive(self, input: &[u8]) -> Result<XX<RNG, SendC>, HandshakeStateError> {
+impl<DH, H, RNG> XX<DH, H, RNG, WaitB>
+where
+    DH: Dh,
+    H: Hash,
+{
+    pub fn receive(self, input: &[u8]) -> Result<XX<DH, H, RNG, SendC>, HandshakeStateError> {
         let Self {
             mut inner,
             state: WaitB,
@@ -129,12 +158,16 @@ impl<RNG> XX<RNG, WaitB> {
     }
 }
 
-impl<RNG> XX<RNG, SendC> {
-    pub fn reply<K: Key>(
+impl<DH, H, RNG> XX<DH, H, RNG, SendC>
+where
+    DH: Dh,
+    H: Hash,
+{
+    pub fn reply(
         self,
-        s: &K,
+        s: &DH,
         mut output: impl Write,
-    ) -> Result<TransportState, HandshakeStateError> {
+    ) -> Result<TransportState<H>, HandshakeStateError> {
         let Self {
             mut inner,
             state: SendC { re, rs },
@@ -149,7 +182,7 @@ impl<RNG> XX<RNG, SendC> {
         let (local, remote) = inner.symmetric_state().split();
 
         Ok(TransportState::new(
-            *inner.symmetric_state().get_handshake_hash(),
+            inner.symmetric_state().get_handshake_hash().clone(),
             local,
             remote,
             rs,
@@ -157,8 +190,12 @@ impl<RNG> XX<RNG, SendC> {
     }
 }
 
-impl<RNG> XX<RNG, WaitC> {
-    pub fn receive(self, input: &[u8]) -> Result<TransportState, HandshakeStateError> {
+impl<DH, H, RNG> XX<DH, H, RNG, WaitC>
+where
+    DH: Dh,
+    H: Hash,
+{
+    pub fn receive(self, input: &[u8]) -> Result<TransportState<H>, HandshakeStateError> {
         let Self {
             mut inner,
             state: WaitC,
@@ -174,7 +211,7 @@ impl<RNG> XX<RNG, WaitC> {
         let (remote, local) = inner.symmetric_state().split();
 
         Ok(TransportState::new(
-            *inner.symmetric_state().get_handshake_hash(),
+            inner.symmetric_state().get_handshake_hash().clone(),
             local,
             remote,
             rs,
@@ -185,16 +222,17 @@ impl<RNG> XX<RNG, WaitC> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{key::ed25519::SecretKey, noise::CipherState};
+    use crate::{key::ed25519_extended::SecretKey, noise::CipherState};
+    use cryptoxide::blake2b::Blake2b;
 
     fn establish_handshake(
         rng1: crate::Seed,
         rng2: crate::Seed,
         initiator_s: SecretKey,
         responder_s: SecretKey,
-    ) -> (TransportState, TransportState) {
-        let initiator_key = initiator_s.public_key();
-        let responder_key = responder_s.public_key();
+    ) -> (TransportState<Blake2b>, TransportState<Blake2b>) {
+        let initiator_key = initiator_s.public();
+        let responder_key = responder_s.public();
 
         let mut rng1 = rng1.into_rand_chacha();
         let mut rng2 = rng2.into_rand_chacha();

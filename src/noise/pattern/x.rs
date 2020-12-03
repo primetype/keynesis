@@ -2,7 +2,8 @@ use std::io::Write;
 
 use crate::{
     buffer::BufRead,
-    key::{ed25519::PublicKey, Key},
+    hash::Hash,
+    key::{ed25519::PublicKey, Dh},
     noise::{CipherState, HandshakeState, HandshakeStateError},
 };
 use rand_core::{CryptoRng, RngCore};
@@ -10,22 +11,37 @@ use rand_core::{CryptoRng, RngCore};
 /// One-Way Handshake [**Noise X**]
 ///
 /// [**Noise X**]: https://noiseexplorer.com/patterns/X/
-pub struct X<RNG> {
-    inner: HandshakeState<RNG>,
+pub struct X<DH, H, RNG>
+where
+    H: Hash,
+{
+    inner: HandshakeState<RNG, DH, H>,
 }
-impl<RNG> X<RNG> {
-    pub const PROTOCOL_NAME: &'static str = "Noise_X_25519_ChaChaPoly_BLAKE2b";
-
+impl<DH, H, RNG> X<DH, H, RNG>
+where
+    DH: Dh,
+    H: Hash,
+{
     pub fn new(rng: RNG, prologue: &[u8]) -> Self {
+        let protocol_name = format!(
+            "Noise_{pattern}_{dh}_{cipher}_{hash}",
+            pattern = "X",
+            dh = DH::name(),
+            cipher = "ChaChaPoly",
+            hash = H::name(),
+        );
+
         Self {
-            inner: HandshakeState::new(rng, prologue, Self::PROTOCOL_NAME),
+            inner: HandshakeState::new(rng, prologue, &protocol_name),
         }
     }
 }
 
-impl<RNG> X<RNG>
+impl<DH, H, RNG> X<DH, H, RNG>
 where
     RNG: RngCore + CryptoRng,
+    DH: Dh,
+    H: Hash,
 {
     /// establish a one-way handshake with an already known `PublicIdentity`
     /// and send the given payload too.
@@ -37,9 +53,9 @@ where
     ///
     /// This is an asymmetric encryption scheme. Once the message has been
     /// sent, we won't be able to decode it back.
-    pub fn send<K: Key>(
+    pub fn send(
         self,
-        s: &K,
+        s: &DH,
         rs: &PublicKey,
         payload: impl AsRef<[u8]>,
         mut output: impl Write,
@@ -56,11 +72,15 @@ where
     }
 }
 
-impl<RNG> X<RNG> {
+impl<DH, H, RNG> X<DH, H, RNG>
+where
+    DH: Dh,
+    H: Hash,
+{
     /// receive a one-way handshake with an unknown
-    pub fn receive<K: Key>(
+    pub fn receive(
         self,
-        s: &K,
+        s: &DH,
         input: &[u8],
     ) -> Result<(PublicKey, Box<[u8]>), HandshakeStateError> {
         let Self { mut inner } = self;
@@ -83,6 +103,7 @@ impl<RNG> X<RNG> {
 mod tests {
     use super::*;
     use crate::key::ed25519::SecretKey;
+    use cryptoxide::blake2b::Blake2b;
 
     #[quickcheck]
     fn send_one_way_x(
@@ -92,11 +113,11 @@ mod tests {
         receiver_s: SecretKey,
         message: Vec<u8>,
     ) -> bool {
-        let sender_key = sender_s.public_key();
-        let receiver_key = receiver_s.public_key();
+        let sender_key = sender_s.public();
+        let receiver_key = receiver_s.public();
 
-        let sender = X::new(rng1.into_rand_chacha(), &[]);
-        let receiver = X::new(rng2.into_rand_chacha(), &[]);
+        let sender = X::<_, Blake2b, _>::new(rng1.into_rand_chacha(), &[]);
+        let receiver = X::<_, Blake2b, _>::new(rng2.into_rand_chacha(), &[]);
 
         let mut output = Vec::with_capacity(1024);
         sender

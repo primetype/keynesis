@@ -2,7 +2,12 @@
 #![feature(test)]
 
 extern crate test;
-use keynesis::{key::ed25519::SecretKey, noise::IK, Seed};
+use cryptoxide::blake2s::Blake2s;
+use keynesis::{
+    key::{curve25519::SecretKey, Dh as _},
+    noise::IK,
+    Seed,
+};
 use test::Bencher;
 
 #[bench]
@@ -19,14 +24,14 @@ fn ik(b: &mut Bencher) {
     let (mut first_msg, mut second_msg) = (Vec::with_capacity(1024), Vec::with_capacity(1024));
 
     b.iter(|| {
-        let initiator = IK::new(&mut rng1, &[]);
-        let responder = IK::new(&mut rng2, &[]);
+        let initiator = IK::<_, Blake2s, _, _>::new(&mut rng1, &[]);
+        let responder = IK::<_, Blake2s, _, _>::new(&mut rng2, &[]);
 
         // -> e, es, s, ss
         let initiator = initiator
             .initiate(
                 &initiator_secret_key,
-                responder_secret_key.public_key(),
+                responder_secret_key.public(),
                 &mut first_msg,
             )
             .unwrap();

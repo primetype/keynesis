@@ -1,20 +1,21 @@
 use crate::{
     buffer::BufRead,
-    key::{
-        ed25519::{PublicKey, SecretKey},
-        Key,
-    },
+    hash::Hash,
+    key::{ed25519_extended::PublicKey, Dh},
     noise::{CipherState, CipherStateError, SymmetricState},
 };
 use rand_core::{CryptoRng, RngCore};
 use std::io::Write;
 use thiserror::Error;
 
-pub(crate) struct HandshakeState<RNG> {
-    symmetric_state: SymmetricState,
+pub(crate) struct HandshakeState<RNG, DH, H>
+where
+    H: Hash,
+{
+    symmetric_state: SymmetricState<H>,
 
     rng: RNG,
-    e: Option<SecretKey>,
+    e: Option<DH>,
 }
 
 #[derive(Debug, Error)]
@@ -35,16 +36,18 @@ pub enum HandshakeStateError {
     Write(#[from] std::io::Error),
 }
 
-impl<RNG> HandshakeState<RNG>
+impl<RNG, DH, H> HandshakeState<RNG, DH, H>
 where
     RNG: RngCore + CryptoRng,
+    DH: Dh,
+    H: Hash,
 {
     pub(crate) fn write_e(&mut self, mut output: impl Write) -> Result<(), HandshakeStateError> {
         if self.e.is_none() {
-            self.e = Some(SecretKey::new(&mut self.rng));
+            self.e = Some(DH::generate(&mut self.rng));
         }
         if let Some(e) = &self.e {
-            let public = e.public_key();
+            let public = e.public();
             output.write_all(public.as_ref())?;
             self.symmetric_state.mix_hash(public.as_ref());
         } else {
@@ -54,7 +57,11 @@ where
     }
 }
 
-impl<RNG> HandshakeState<RNG> {
+impl<RNG, DH, H> HandshakeState<RNG, DH, H>
+where
+    DH: Dh,
+    H: Hash,
+{
     pub(crate) fn new(rng: RNG, prologue: &[u8], protocol_name: &str) -> Self {
         let mut symmetric_state = SymmetricState::initialize_symmetric(protocol_name);
         symmetric_state.mix_hash(prologue);
@@ -66,8 +73,12 @@ impl<RNG> HandshakeState<RNG> {
         }
     }
 
-    pub(crate) fn symmetric_state(&self) -> &SymmetricState {
-        &self.symmetric_state
+    pub(crate) fn mix_hash(&mut self, pk: &PublicKey) {
+        self.symmetric_state.mix_hash(pk.as_ref());
+    }
+
+    pub(crate) fn symmetric_state(&mut self) -> &mut SymmetricState<H> {
+        &mut self.symmetric_state
     }
 
     fn encrypted_len(&self, len: usize) -> usize {
@@ -160,7 +171,7 @@ impl<RNG> HandshakeState<RNG> {
         }
     }
 
-    pub(crate) fn dh_sx<K: Key>(&mut self, s: &K, e: &PublicKey) {
+    pub(crate) fn dh_sx<K: Dh>(&mut self, s: &K, e: &PublicKey) {
         let dh = s.dh(e);
         self.symmetric_state.mix_key(dh.as_ref());
     }

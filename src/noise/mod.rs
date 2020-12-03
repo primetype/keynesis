@@ -25,8 +25,6 @@ pub(crate) use self::{
     cipher_state::CipherState, handshake_state::HandshakeState, symmetric_state::SymmetricState,
 };
 pub use self::{
-    cipher_state::CipherStateError,
-    handshake_state::HandshakeStateError,
-    pattern::*,
-    transport_state::{SessionId, TransportState},
+    cipher_state::CipherStateError, handshake_state::HandshakeStateError, pattern::*,
+    transport_state::TransportState,
 };

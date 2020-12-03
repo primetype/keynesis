@@ -5,9 +5,11 @@ use thiserror::Error;
 #[derive(Debug, Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct Nonce(u64);
 
+#[derive(Clone)]
 pub struct CipherState {
     k: [u8; Self::KEY_LEN],
     n: Nonce,
+    has_key: bool,
 }
 
 #[derive(Debug, Error)]
@@ -63,20 +65,27 @@ impl CipherState {
     pub const TAG_LEN: usize = 16;
 
     pub fn new() -> Self {
-        Self::initialize_key([0; Self::KEY_LEN])
+        Self {
+            k: [0; Self::KEY_LEN],
+            n: Nonce::zero(),
+            has_key: false,
+        }
     }
 
     pub fn initialize_key(k: [u8; Self::KEY_LEN]) -> Self {
         Self {
             k,
             n: Nonce::zero(),
+            has_key: true,
         }
     }
 
+    #[inline(always)]
     pub fn has_key(&self) -> bool {
-        self.k != [0; 32]
+        self.has_key
     }
 
+    #[inline(always)]
     pub(crate) fn nonce(&self) -> &Nonce {
         &self.n
     }
@@ -160,5 +169,130 @@ impl CipherState {
 impl Default for CipherState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use noiseexplorer_ik::state::CipherState as CipherStateRef;
+
+    #[test]
+    fn ref_empty() {
+        let mut ours = CipherState::new();
+        let mut theirs = CipherStateRef::new();
+
+        assert_eq!(
+            ours.n.0,
+            theirs.n.get_value().unwrap(),
+            "nonce should be initialised to 0"
+        );
+        assert_eq!(
+            ours.k,
+            theirs.k.as_bytes(),
+            "key should be initialised to 0"
+        );
+
+        const PLAINTEXT: &[u8] = b"plain text";
+        let mut our_output = [0u8; 1024];
+        ours.encrypt_with_ad(&[], PLAINTEXT, &mut our_output)
+            .unwrap();
+
+        let mut their_output = [0; 10];
+        let mut their_mac = [0; 16];
+        their_output.copy_from_slice(PLAINTEXT);
+        let err = theirs
+            .encrypt_with_ad(&[], &mut their_output, &mut their_mac)
+            .unwrap_err();
+        assert_eq!(noiseexplorer_ik::error::NoiseError::EmptyKeyError, err);
+
+        assert_eq!(
+            &our_output[..PLAINTEXT.len()],
+            &their_output[..PLAINTEXT.len()],
+            "encrypted data should be the same"
+        );
+        assert_eq!(
+            &our_output[PLAINTEXT.len()..PLAINTEXT.len() + CipherState::TAG_LEN],
+            &their_mac,
+            "encrypted data MAC should be the same"
+        );
+        assert_eq!(
+            &our_output[..PLAINTEXT.len()],
+            &PLAINTEXT[..],
+            "no key, so input should be the same as output"
+        )
+    }
+
+    #[test]
+    fn ref_something() {
+        const KEY: [u8; CipherState::KEY_LEN] = [0x1b; CipherState::KEY_LEN];
+
+        let mut ours = CipherState::initialize_key(KEY);
+        let mut theirs = CipherStateRef::from_key(noiseexplorer_ik::types::Key::from_bytes(KEY));
+
+        let mut decrypt_ours = ours.clone();
+        let mut decrypt_theirs = theirs.clone();
+
+        assert_eq!(
+            ours.n.0,
+            theirs.n.get_value().unwrap(),
+            "nonce should be initialised to 0"
+        );
+        assert_eq!(
+            ours.k,
+            theirs.k.as_bytes(),
+            "key should be initialised to 0"
+        );
+        assert_eq!(ours.n.0, 0, "nonce should be initialised to 0");
+
+        const PLAINTEXT: &[u8] = b"plain text";
+        let mut our_output = [0u8; 1024];
+        ours.encrypt_with_ad(&[], PLAINTEXT, &mut our_output)
+            .unwrap();
+
+        let mut their_output = [0; 10];
+        let mut their_mac = [0; 16];
+        their_output.copy_from_slice(PLAINTEXT);
+        theirs
+            .encrypt_with_ad(&[], &mut their_output, &mut their_mac)
+            .unwrap();
+
+        assert_eq!(
+            &our_output[..PLAINTEXT.len()],
+            &their_output[..PLAINTEXT.len()],
+            "encrypted data should be the same"
+        );
+        assert_eq!(
+            &our_output[PLAINTEXT.len()..PLAINTEXT.len() + CipherState::TAG_LEN],
+            &their_mac,
+            "encrypted data MAC should be the same"
+        );
+
+        decrypt_theirs
+            .decrypt_with_ad(&[], &mut their_output, &mut their_mac)
+            .unwrap();
+        assert_eq!(their_output, PLAINTEXT);
+
+        let mut our_decrypted = [0u8; 10];
+        decrypt_ours
+            .decrypt_with_ad(
+                &[],
+                &our_output[..PLAINTEXT.len() + CipherState::TAG_LEN],
+                &mut our_decrypted,
+            )
+            .unwrap();
+        assert_eq!(our_decrypted, PLAINTEXT);
+
+        assert_eq!(
+            ours.n.0,
+            theirs.n.get_value().unwrap(),
+            "nonce should be incremented to 1"
+        );
+        assert_eq!(
+            ours.k,
+            theirs.k.as_bytes(),
+            "key should be incremented to 1"
+        );
+        assert_eq!(ours.n.0, 1, "nonce should be incremented to 1");
     }
 }

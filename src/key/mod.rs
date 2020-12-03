@@ -78,17 +78,36 @@ encryption_context.process(message, &mut encrypted);
 pub mod ed25519;
 pub mod ed25519_extended;
 pub mod ed25519_hd;
+pub mod curve25519;
 mod shared_secret;
 
 pub use self::shared_secret::SharedSecret;
+use rand_core::{CryptoRng, RngCore};
 
-pub trait Key {
+pub trait Dh {
+    fn name() -> &'static str;
+
+    fn generate<RNG>(rng: &mut RNG) -> Self
+    where
+        RNG: RngCore + CryptoRng;
+
     fn public(&self) -> ed25519::PublicKey;
 
     fn dh(&self, public: &ed25519::PublicKey) -> SharedSecret;
 }
 
-impl Key for ed25519::SecretKey {
+impl Dh for curve25519::SecretKey {
+    fn name() -> &'static str {
+        "25519"
+    }
+
+    fn generate<RNG>(rng: &mut RNG) -> Self
+    where
+        RNG: RngCore + CryptoRng,
+    {
+        Self::new(rng)
+    }
+
     #[inline]
     fn public(&self) -> ed25519::PublicKey {
         self.public_key()
@@ -100,7 +119,18 @@ impl Key for ed25519::SecretKey {
     }
 }
 
-impl Key for ed25519_extended::SecretKey {
+impl Dh for ed25519::SecretKey {
+    fn name() -> &'static str {
+        "ed25519"
+    }
+
+    fn generate<RNG>(rng: &mut RNG) -> Self
+    where
+        RNG: RngCore + CryptoRng,
+    {
+        Self::new(rng)
+    }
+
     #[inline]
     fn public(&self) -> ed25519::PublicKey {
         self.public_key()
@@ -112,10 +142,44 @@ impl Key for ed25519_extended::SecretKey {
     }
 }
 
-impl Key for ed25519_hd::SecretKey {
+impl Dh for ed25519_extended::SecretKey {
+    fn name() -> &'static str {
+        "ed25519"
+    }
+
+    fn generate<RNG>(rng: &mut RNG) -> Self
+    where
+        RNG: RngCore + CryptoRng,
+    {
+        Self::new(rng)
+    }
+
     #[inline]
     fn public(&self) -> ed25519::PublicKey {
-        *self.public_key().key()
+        self.public_key()
+    }
+
+    #[inline]
+    fn dh(&self, public: &ed25519::PublicKey) -> SharedSecret {
+        self.exchange(public)
+    }
+}
+
+impl Dh for ed25519_hd::SecretKey {
+    fn name() -> &'static str {
+        "ed25519"
+    }
+
+    fn generate<RNG>(rng: &mut RNG) -> Self
+    where
+        RNG: RngCore + CryptoRng,
+    {
+        Self::new(rng)
+    }
+
+    #[inline]
+    fn public(&self) -> ed25519::PublicKey {
+        self.key().public_key()
     }
 
     #[inline]

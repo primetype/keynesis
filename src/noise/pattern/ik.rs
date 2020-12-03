@@ -1,6 +1,7 @@
 use crate::{
     buffer::BufRead,
-    key::{ed25519::PublicKey, Key},
+    hash::Hash,
+    key::{ed25519::PublicKey, Dh},
     noise::{HandshakeState, HandshakeStateError, TransportState},
 };
 use rand_core::{CryptoRng, RngCore};
@@ -9,8 +10,11 @@ use std::io::Write;
 /// Interactive Handshake [**Noise IK**]
 ///
 /// [**Noise IK**]: https://noiseexplorer.com/patterns/IK/
-pub struct IK<RNG, S> {
-    inner: HandshakeState<RNG>,
+pub struct IK<DH, H, RNG, S>
+where
+    H: Hash,
+{
+    inner: HandshakeState<RNG, DH, H>,
     state: S,
 }
 
@@ -23,34 +27,47 @@ pub struct SendB {
     rs: PublicKey,
 }
 
-impl<RNG> IK<RNG, A> {
-    pub const PROTOCOL_NAME: &'static str = "Noise_IK_25519_ChaChaPoly_BLAKE2b";
-
+impl<DH, H, RNG> IK<DH, H, RNG, A>
+where
+    DH: Dh,
+    H: Hash,
+{
     pub fn new(rng: RNG, prologue: &[u8]) -> Self {
+        let protocol_name = format!(
+            "Noise_{pattern}_{dh}_{cipher}_{hash}",
+            pattern = "IK",
+            dh = DH::name(),
+            cipher = "ChaChaPoly",
+            hash = H::name(),
+        );
         Self {
-            inner: HandshakeState::new(rng, prologue, &Self::PROTOCOL_NAME),
+            inner: HandshakeState::new(rng, prologue, &protocol_name),
             state: A,
         }
     }
 }
 
-impl<RNG> IK<RNG, A>
+impl<DH, H, RNG> IK<DH, H, RNG, A>
 where
     RNG: RngCore + CryptoRng,
+    DH: Dh,
+    H: Hash,
 {
     pub fn initiate<K>(
         self,
         s: &K,
         rs: PublicKey,
         mut output: impl Write,
-    ) -> Result<IK<RNG, WaitB>, HandshakeStateError>
+    ) -> Result<IK<DH, H, RNG, WaitB>, HandshakeStateError>
     where
-        K: Key,
+        K: Dh,
     {
         let Self {
             mut inner,
             state: A,
         } = self;
+
+        inner.mix_hash(&rs);
 
         inner.write_e(&mut output)?;
         inner.dh_ex(&rs);
@@ -65,15 +82,22 @@ where
         })
     }
 }
-impl<RNG> IK<RNG, A> {
-    pub fn receive<K>(self, s: &K, input: &[u8]) -> Result<IK<RNG, SendB>, HandshakeStateError>
-    where
-        K: Key,
-    {
+impl<DH, H, RNG> IK<DH, H, RNG, A>
+where
+    DH: Dh,
+    H: Hash,
+{
+    pub fn receive(
+        self,
+        s: &DH,
+        input: &[u8],
+    ) -> Result<IK<DH, H, RNG, SendB>, HandshakeStateError> {
         let Self {
             mut inner,
             state: A,
         } = self;
+
+        inner.mix_hash(&s.public());
 
         let mut input = BufRead::new(input);
 
@@ -90,15 +114,17 @@ impl<RNG> IK<RNG, A> {
         })
     }
 }
-impl<RNG> IK<RNG, SendB>
+impl<DH, H, RNG> IK<DH, H, RNG, SendB>
 where
     RNG: RngCore + CryptoRng,
+    DH: Dh,
+    H: Hash,
 {
     pub fn remote_public_identity(&self) -> &PublicKey {
         &self.state.rs
     }
 
-    pub fn reply(self, mut output: impl Write) -> Result<TransportState, HandshakeStateError> {
+    pub fn reply(self, mut output: impl Write) -> Result<TransportState<H>, HandshakeStateError> {
         let Self {
             mut inner,
             state: SendB { re, rs },
@@ -113,22 +139,24 @@ where
         let (remote, local) = inner.symmetric_state().split();
 
         Ok(TransportState::new(
-            *inner.symmetric_state().get_handshake_hash(),
+            inner.symmetric_state().get_handshake_hash().clone(),
             local,
             remote,
             rs,
         ))
     }
 }
-impl<RNG> IK<RNG, WaitB> {
+impl<DH, H, RNG> IK<DH, H, RNG, WaitB>
+where
+    DH: Dh,
+
+    H: Hash,
+{
     pub fn remote_public_identity(&self) -> &PublicKey {
         &self.state.rs
     }
 
-    pub fn receive<K>(self, s: &K, input: &[u8]) -> Result<TransportState, HandshakeStateError>
-    where
-        K: Key,
-    {
+    pub fn receive(self, s: &DH, input: &[u8]) -> Result<TransportState<H>, HandshakeStateError> {
         let Self {
             mut inner,
             state: WaitB { rs },
@@ -145,7 +173,7 @@ impl<RNG> IK<RNG, WaitB> {
         let (local, remote) = inner.symmetric_state().split();
 
         Ok(TransportState::new(
-            *inner.symmetric_state().get_handshake_hash(),
+            inner.symmetric_state().get_handshake_hash().clone(),
             local,
             remote,
             rs,
@@ -155,17 +183,19 @@ impl<RNG> IK<RNG, WaitB> {
 
 #[cfg(test)]
 mod tests {
+    use cryptoxide::blake2b::Blake2b;
+
     use super::*;
-    use crate::{key::ed25519::SecretKey, noise::CipherState};
+    use crate::{key::ed25519_extended::SecretKey, noise::CipherState};
 
     fn establish_handshake(
         rng1: crate::Seed,
         rng2: crate::Seed,
         initiator_s: SecretKey,
         responder_s: SecretKey,
-    ) -> (TransportState, TransportState) {
-        let initiator_key = initiator_s.public_key();
-        let responder_key = responder_s.public_key();
+    ) -> (TransportState<Blake2b>, TransportState<Blake2b>) {
+        let initiator_key = initiator_s.public();
+        let responder_key = responder_s.public();
 
         let mut rng1 = rng1.into_rand_chacha();
         let mut rng2 = rng2.into_rand_chacha();

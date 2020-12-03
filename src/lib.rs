@@ -12,6 +12,7 @@ and APIs to use for different purpose
 extern crate quickcheck_macros;
 
 mod buffer;
+pub mod hash;
 pub mod key;
 pub mod memsec;
 pub mod noise;

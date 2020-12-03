@@ -6,7 +6,7 @@ use test::Bencher;
 
 use snow::{params::NoiseParams, Builder};
 
-const PATTERN: &str = "Noise_IK_25519_ChaChaPoly_BLAKE2b";
+const PATTERN: &str = "Noise_IK_25519_ChaChaPoly_BLAKE2s";
 
 #[bench]
 fn ik(b: &mut Bencher) {
