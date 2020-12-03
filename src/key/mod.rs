@@ -78,6 +78,7 @@ encryption_context.process(message, &mut encrypted);
 pub mod ed25519;
 pub mod ed25519_extended;
 pub mod ed25519_hd;
+// pub mod enclave;
 pub mod curve25519;
 mod shared_secret;
 
