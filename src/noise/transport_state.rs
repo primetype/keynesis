@@ -67,6 +67,10 @@ impl<H: Hash> TransportState<H> {
     }
 
     /// send message to the remote peer
+    ///
+    /// The output must be at least 16 bytes longer than the input
+    /// this is in order to add the MAC, this will be use to authenticate
+    /// the message has not been tempered with.
     pub fn send(
         &mut self,
         input: impl AsRef<[u8]>,
@@ -79,6 +83,10 @@ impl<H: Hash> TransportState<H> {
     }
 
     /// receive message from the remote peer
+    ///
+    /// The output can have 16 bytes less than the input. This is because
+    /// the MAC is appended in the input message so we can verify the
+    /// message has not been tempered with.
     pub fn receive(
         &mut self,
         input: impl AsRef<[u8]>,
