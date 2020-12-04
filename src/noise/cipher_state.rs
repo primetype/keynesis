@@ -104,9 +104,8 @@ impl CipherState {
 
             let mut ctx = ChaCha20Poly1305::new(&self.k, &self.n.to_bytes(), ad.as_ref());
 
-            let mut tag = [0; Self::TAG_LEN];
-            ctx.encrypt(plaintext.as_ref(), &mut output[..tag_index], &mut tag);
-            output[tag_index..tag_index + tag.len()].copy_from_slice(&tag);
+            let (output, tag) = output.split_at_mut(tag_index);
+            ctx.encrypt(plaintext.as_ref(), output, &mut tag[..Self::TAG_LEN]);
             self.n = self.n.increment().ok_or(CipherStateError::Nonce)?;
             tag_index + Self::TAG_LEN
         } else {
@@ -134,12 +133,11 @@ impl CipherState {
                 return Err(CipherStateError::NotEnoughOutput);
             }
 
-            let tag = &cipher_text[tag_index..tag_index + Self::TAG_LEN];
-            let cipher_text = &cipher_text[..tag_index];
+            let (cipher_text, tag) = cipher_text.split_at(tag_index);
 
             let mut ctx = ChaCha20Poly1305::new(&self.k, &self.n.to_bytes(), ad.as_ref());
 
-            if !ctx.decrypt(cipher_text.as_ref(), output, tag) {
+            if !ctx.decrypt(cipher_text.as_ref(), output, &tag[..Self::TAG_LEN]) {
                 return Err(CipherStateError::InvalidTag);
             }
 
