@@ -16,6 +16,7 @@ pub mod hash;
 pub mod key;
 pub mod memsec;
 pub mod noise;
+pub mod passport;
 mod seed;
 
 pub use self::{

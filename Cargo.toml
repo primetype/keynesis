@@ -27,6 +27,7 @@ rand_chacha = "0.2.2"
 rand = "0.7.3"
 quickcheck = "0.9.2"
 quickcheck_macros = "0.9.1"
+chrono = "0.4.19"
 
 hacl-star = "0.1.0"
 snow = { version = "0.7.2" }
