@@ -1,9 +1,16 @@
+mod deregister_master_key;
 mod register_master_key;
 
-pub use self::register_master_key::{
-    RegisterMasterKey, RegisterMasterKeyError, RegisterMasterKeyMut, RegisterMasterKeySlice,
+pub use self::{
+    deregister_master_key::{
+        DeregisterMasterKey, DeregisterMasterKeyError, DeregisterMasterKeyMut,
+        DeregisterMasterKeySlice,
+    },
+    register_master_key::{
+        RegisterMasterKey, RegisterMasterKeyError, RegisterMasterKeyMut, RegisterMasterKeySlice,
+    },
 };
-use crate::key::ed25519::SecretKey;
+use crate::key::ed25519::{PublicKey, SecretKey};
 use std::{
     convert::{TryFrom, TryInto as _},
     fmt::{self, Formatter},
@@ -17,6 +24,7 @@ const ENTRY_TYPE_END: usize = ENTRY_TYPE_INDEX + std::mem::size_of::<u16>();
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum EntryType {
     RegisterMasterKey,
+    DeregisterMasterKey,
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -44,19 +52,28 @@ pub enum EntryError {
         #[source]
         RegisterMasterKeyError,
     ),
+
+    #[error("Expecting a valid Master Key deregistration entry")]
+    DeregisterMasterKey(
+        #[from]
+        #[source]
+        DeregisterMasterKeyError,
+    ),
 }
 
 impl EntryType {
     pub fn to_u16(self) -> u16 {
         match self {
             Self::RegisterMasterKey => 0x0001,
+            Self::DeregisterMasterKey => 0x0002,
         }
     }
 
     pub fn try_from_u16(value: u16) -> Result<Self, EntryError> {
         match value {
             1 => Ok(Self::RegisterMasterKey),
-            0 | 2..=u16::MAX => Err(EntryError::UnknownEntryType { value }),
+            2 => Ok(Self::DeregisterMasterKey),
+            0 | 3..=u16::MAX => Err(EntryError::UnknownEntryType { value }),
         }
     }
 
@@ -67,6 +84,7 @@ impl EntryType {
     pub fn size(self) -> usize {
         let size = match self {
             Self::RegisterMasterKey => RegisterMasterKey::SIZE,
+            Self::DeregisterMasterKey => DeregisterMasterKey::SIZE,
         };
 
         size + std::mem::size_of::<u16>()
@@ -88,6 +106,11 @@ impl Entry {
     pub fn register_master_key(&self) -> Option<RegisterMasterKeySlice<'_>> {
         self.as_slice().register_master_key()
     }
+
+    #[inline(always)]
+    pub fn deregister_master_key(&self) -> Option<DeregisterMasterKeySlice<'_>> {
+        self.as_slice().deregister_master_key()
+    }
 }
 
 impl<'a> EntryMut<RegisterMasterKeyMut<'a>> {
@@ -100,6 +123,33 @@ impl<'a> EntryMut<RegisterMasterKeyMut<'a>> {
         let slice_ptr = slice.as_mut_ptr();
         let slice_size = slice.len();
         let t = RegisterMasterKeyMut::new(&mut slice[ENTRY_TYPE_END..]);
+
+        Self {
+            slice_ptr,
+            slice_size,
+            t,
+        }
+    }
+
+    pub fn finalize(self, author: &SecretKey) -> EntrySlice<'a> {
+        let _ = self.t.finalize(author);
+
+        let slice = unsafe { std::slice::from_raw_parts(self.slice_ptr, self.slice_size) };
+
+        EntrySlice::from_slice_unchecked(slice)
+    }
+}
+
+impl<'a> EntryMut<DeregisterMasterKeyMut<'a>> {
+    pub fn new_deregister_master_key(slice: &'a mut [u8], key: &PublicKey) -> Self {
+        assert!(slice.len() == EntryType::DeregisterMasterKey.size());
+
+        slice[ENTRY_TYPE_INDEX..ENTRY_TYPE_END]
+            .copy_from_slice(&EntryType::DeregisterMasterKey.to_u16().to_be_bytes());
+
+        let slice_ptr = slice.as_mut_ptr();
+        let slice_size = slice.len();
+        let t = DeregisterMasterKeyMut::new(&mut slice[ENTRY_TYPE_END..], key);
 
         Self {
             slice_ptr,
@@ -140,6 +190,10 @@ impl<'a> EntrySlice<'a> {
                 // make sure the underlying entry is valid too
                 RegisterMasterKeySlice::try_from_slice(&slice[ENTRY_TYPE_END..])?;
             }
+            EntryType::DeregisterMasterKey => {
+                // make sure the underlying entry is valid too
+                DeregisterMasterKeySlice::try_from_slice(&slice[ENTRY_TYPE_END..])?;
+            }
         }
 
         Ok(entry)
@@ -155,7 +209,12 @@ impl<'a> EntrySlice<'a> {
         let entry = Self(slice);
 
         debug_assert!(slice.len() > 2, "needs at least 2 bytes for the EntryType");
-        debug_assert_eq!(slice.len(), entry.entry_type().size());
+        debug_assert_eq!(
+            slice.len(),
+            entry.entry_type().size(),
+            "Invalid length for entry {:?}",
+            entry.entry_type()
+        );
 
         entry
     }
@@ -179,6 +238,16 @@ impl<'a> EntrySlice<'a> {
             let slice = &self.0[ENTRY_TYPE_END..];
 
             Some(RegisterMasterKeySlice::from_slice_unchecked(slice))
+        } else {
+            None
+        }
+    }
+
+    pub fn deregister_master_key(&self) -> Option<DeregisterMasterKeySlice<'a>> {
+        if EntryType::DeregisterMasterKey == self.entry_type() {
+            let slice = &self.0[ENTRY_TYPE_END..];
+
+            Some(DeregisterMasterKeySlice::from_slice_unchecked(slice))
         } else {
             None
         }
@@ -214,6 +283,9 @@ impl<'a> fmt::Debug for EntrySlice<'a> {
         if let Some(entry) = self.register_master_key() {
             dbg.field(&entry);
         }
+        if let Some(entry) = self.deregister_master_key() {
+            dbg.field(&entry);
+        }
         dbg.finish()
     }
 }
@@ -222,6 +294,9 @@ impl fmt::Debug for Entry {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut dbg = f.debug_tuple("Entry");
         if let Some(entry) = self.register_master_key() {
+            dbg.field(&entry);
+        }
+        if let Some(entry) = self.deregister_master_key() {
             dbg.field(&entry);
         }
         dbg.finish()
@@ -250,12 +325,12 @@ impl<'a> AsRef<[u8]> for EntrySlice<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::key::ed25519::PublicKey;
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for EntryType {
-        fn arbitrary<G: Gen>(_g: &mut G) -> Self {
-            // let t = u16::arbitrary(g) % 1 + 1;
-            let t = 1;
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+            let t = u16::arbitrary(g) % 2 + 1;
             Self::try_from_u16(t).expect("value should be correct entry type")
         }
     }
@@ -269,6 +344,11 @@ mod tests {
                 EntryType::RegisterMasterKey => {
                     let sk = SecretKey::arbitrary(g);
                     let _ = EntryMut::new_register_master_key(&mut bytes).finalize(&sk);
+                }
+                EntryType::DeregisterMasterKey => {
+                    let sk = SecretKey::arbitrary(g);
+                    let key = PublicKey::arbitrary(g);
+                    let _ = EntryMut::new_deregister_master_key(&mut bytes, &key).finalize(&sk);
                 }
             }
 

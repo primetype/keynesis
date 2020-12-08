@@ -1,6 +1,6 @@
 use crate::{
     key::ed25519::{PublicKey, SecretKey, Signature},
-    passport::block::{Hash, Previous, Time, Version},
+    passport::block::{Hash, Hasher, Previous, Time, Version},
 };
 use std::{
     convert::{TryFrom, TryInto},
@@ -203,6 +203,10 @@ impl<'a> HeaderSlice<'a> {
             "the slice should have the appropriate length"
         );
         Self(slice)
+    }
+
+    pub fn hash(&self) -> Hash {
+        Hasher::hash(self.0)
     }
 
     pub fn version(&self) -> Version {
