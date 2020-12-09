@@ -15,6 +15,7 @@ where
     symmetric_state: SymmetricState<H>,
 
     rng: RNG,
+    is_psk: bool,
     e: Option<DH>,
 }
 
@@ -50,6 +51,9 @@ where
             let public = e.public();
             output.write_all(public.as_ref())?;
             self.symmetric_state.mix_hash(public.as_ref());
+            if self.is_psk {
+                self.symmetric_state.mix_key(public.as_ref());
+            }
         } else {
             unsafe { std::hint::unreachable_unchecked() }
         }
@@ -69,8 +73,14 @@ where
         Self {
             symmetric_state,
             rng,
+            is_psk: false,
             e: None,
         }
+    }
+
+    pub(crate) fn psk(&mut self, psk: &[u8]) {
+        self.is_psk = true;
+        self.symmetric_state.mix_key_and_hash(psk);
     }
 
     pub(crate) fn mix_hash(&mut self, pk: &PublicKey) {
@@ -99,6 +109,9 @@ where
             let mut pk = [0; PublicKey::SIZE];
             input.read(&mut pk);
             self.symmetric_state.mix_hash(&pk);
+            if self.is_psk {
+                self.symmetric_state.mix_key(&pk);
+            }
             Ok(PublicKey::from(pk))
         }
     }

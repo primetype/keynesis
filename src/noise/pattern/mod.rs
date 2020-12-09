@@ -17,7 +17,8 @@ how you can leverage that.
 */
 pub mod ik;
 pub mod ix;
+pub mod n;
 pub mod x;
 pub mod xx;
 
-pub use self::{ik::IK, ix::IX, x::X, xx::XX};
+pub use self::{ik::IK, ix::IX, n::N, x::X, xx::XX};

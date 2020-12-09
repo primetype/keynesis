@@ -84,7 +84,6 @@ where
 
     // allow the function to be unused, it is meant to be as we don't have
     // any pre-shared key
-    #[allow(dead_code)]
     pub fn mix_key_and_hash(&mut self, input_key_material: impl AsRef<[u8]>) {
         let mut temp_h = H::zero_hash();
         let mut temp_k = H::zero_hash();
