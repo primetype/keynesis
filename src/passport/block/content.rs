@@ -16,7 +16,7 @@ pub(crate) struct ContentMut<'a>(&'a mut Vec<u8>);
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
 pub struct ContentSlice<'a>(&'a [u8]);
 
-#[derive(Debug, Error, Eq, PartialEq)]
+#[derive(Debug, Error)]
 pub enum ContentError {
     #[error("Content's max size has been reached, cannot add the entry")]
     MaxSizeReached,
@@ -96,7 +96,7 @@ impl<'a> ContentSlice<'a> {
         while slice.len() >= 2 {
             let entry_type =
                 EntryType::try_from_u16(u16::from_be_bytes(slice[..2].try_into().unwrap()))?;
-            let size = entry_type.size();
+            let size = entry_type.size(&slice[2..]);
 
             let _ = EntrySlice::try_from_slice(&slice[..size])?;
             slice = &slice[size..];
@@ -133,7 +133,7 @@ impl<'a> Iterator for ContentSliceIter<'a> {
             let entry_type =
                 EntryType::try_from_u16(u16::from_be_bytes(self.0[..2].try_into().unwrap()))
                     .unwrap();
-            let size = entry_type.size();
+            let size = entry_type.size(&self.0[2..]);
 
             let entry = EntrySlice::from_slice_unchecked(&self.0[..size]);
             self.0 = &self.0[size..];
@@ -195,7 +195,11 @@ impl Deref for Content {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::passport::block::Entry;
+    use crate::{
+        key::ed25519::{PublicKey, SecretKey},
+        passport::block::{Entry, EntryMut},
+        Seed,
+    };
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for Content {
@@ -227,14 +231,58 @@ mod tests {
     fn too_long_fail() {
         let content = [0; Content::MAX_SIZE + 1];
 
-        assert_eq!(
-            ContentSlice::try_from_slice(&content),
-            Err(ContentError::MaxSizeReached)
-        );
+        match ContentSlice::try_from_slice(&content) {
+            Err(ContentError::MaxSizeReached) => (),
+            Err(error) => panic!("Didn't expect this error: {:?}", error),
+            Ok(_) => panic!("Content should have failed with too long error"),
+        }
+    }
+
+    #[test]
+    fn test_shared_entry_only() {
+        let mut rng = quickcheck::StdThreadGen::new(1024);
+
+        let max = 1;
+        let mut bytes = Vec::with_capacity(1024);
+        let mut content = ContentMut::new(&mut bytes);
+
+        for _ in 0..max {
+            let mut entry_bytes = Vec::with_capacity(1024);
+            let key = SecretKey::arbitrary(&mut rng);
+            let mut builder = EntryMut::new_set_shared_key(&mut entry_bytes, &key.public_key());
+            let passphrase = Option::<Seed>::arbitrary(&mut rng);
+            let mut entry_rng = Seed::arbitrary(&mut rng).into_rand_chacha();
+
+            let count = u8::arbitrary(&mut rng) % 12 + 1;
+            for _ in 0..count {
+                builder
+                    .share_with(
+                        &mut entry_rng,
+                        &key,
+                        &PublicKey::arbitrary(&mut rng),
+                        &passphrase,
+                    )
+                    .expect("valid share to this key");
+            }
+
+            let entry = builder.finalize().expect("valid key sharing entry");
+            match content.push(&entry) {
+                Ok(()) => (),
+                Err(ContentError::MaxSizeReached) => break,
+                Err(error) => {
+                    // another error occurred, it should not happen but
+                    // better ready than sorry
+                    unreachable!(&error)
+                }
+            }
+        }
+
+        let _ = content.into_content();
     }
 
     #[quickcheck]
     fn decode_slice(content: Content) -> bool {
-        ContentSlice::try_from_slice(&content.0).is_ok()
+        ContentSlice::try_from_slice(&content.0).unwrap();
+        true
     }
 }

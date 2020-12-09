@@ -1,7 +1,7 @@
 use crate::{
     key::ed25519::PublicKey,
     passport::block::{
-        entry::{DeregisterMasterKeySlice, RegisterMasterKeySlice},
+        entry::{DeregisterMasterKeySlice, RegisterMasterKeySlice, SetSharedKeySlice},
         BlockSlice, ContentSlice, Hash, HeaderSlice, Previous, Time,
     },
 };
@@ -13,6 +13,7 @@ pub struct Ledger {
     on_block: Hash,
     at_time: Time,
     active_master_keys: BTreeSet<PublicKey>,
+    shared_key: Option<(Time, PublicKey)>,
 }
 
 #[derive(Debug, Error)]
@@ -55,6 +56,7 @@ impl Ledger {
             on_block: header.hash(),
             at_time: header.time(),
             active_master_keys: BTreeSet::new(),
+            shared_key: None,
         };
 
         ledger.active_master_keys.insert(header.author());
@@ -117,6 +119,8 @@ impl Ledger {
                 self.apply_register_master_key(master_key)?
             } else if let Some(deregister) = entry.deregister_master_key() {
                 self.apply_deregister_master_key(deregister)?
+            } else if let Some(shared_key) = entry.set_shared_key() {
+                self.apply_shared_key(shared_key)?
             }
         }
 
@@ -157,5 +161,18 @@ impl Ledger {
         } else {
             Err(LedgerError::CannotDeregisterMasterKey)
         }
+    }
+
+    fn apply_shared_key(&mut self, entry: SetSharedKeySlice<'_>) -> Result<(), LedgerError> {
+        if self.at_time < entry.created_at() {
+            return Err(LedgerError::InvalidEntryTime);
+        }
+
+        let key = entry.key();
+        let time = entry.created_at();
+
+        self.shared_key = Some((time, key));
+
+        Ok(())
     }
 }
