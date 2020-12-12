@@ -3,14 +3,19 @@ use crate::{
     passport::block::Time,
 };
 use std::{
+    borrow::Cow,
     convert::{TryFrom, TryInto as _},
     fmt::{self, Formatter},
 };
 use thiserror::Error;
 
+const MAX_ALIAS_LEN: usize = 32;
+
 const KEY_INDEX: usize = 0;
 const KEY_END: usize = KEY_INDEX + PublicKey::SIZE;
-const CREATED_AT_INDEX: usize = KEY_END;
+const ALIAS_INDEX: usize = KEY_END;
+const ALIAS_END: usize = ALIAS_INDEX + MAX_ALIAS_LEN;
+const CREATED_AT_INDEX: usize = ALIAS_END;
 const CREATED_AT_END: usize = CREATED_AT_INDEX + Time::SIZE;
 const REGISTRATION_TIMEOUT_INDEX: usize = CREATED_AT_END;
 const REGISTRATION_TIMEOUT_END: usize = REGISTRATION_TIMEOUT_INDEX + Time::SIZE;
@@ -32,6 +37,9 @@ pub enum RegisterMasterKeyError {
 
     #[error("The signature does verify against the entry")]
     InvalidSignature,
+
+    #[error("Invalid alias")]
+    InvalidAlias,
 
     #[error("The registration timeout ({registration_timeout}) and creation time ({created_at}) are not consistent")]
     InvalidRegistrationTime {
@@ -55,6 +63,10 @@ impl RegisterMasterKey {
         self.as_slice().key()
     }
 
+    pub fn alias(&self) -> Cow<'_, str> {
+        self.as_slice().alias()
+    }
+
     #[inline(always)]
     pub fn created_at(&self) -> Time {
         self.as_slice().created_at()
@@ -72,18 +84,26 @@ impl RegisterMasterKey {
 }
 
 impl<'a> RegisterMasterKeyMut<'a> {
-    pub fn new(slice: &'a mut [u8]) -> Self {
+    pub fn new(slice: &'a mut [u8], alias: &str) -> Result<Self, RegisterMasterKeyError> {
         let mut s = Self(slice);
 
-        let created_at = Time::now();
+        if !check_alias(alias) {
+            return Err(RegisterMasterKeyError::InvalidAlias);
+        }
 
+        s.alias(alias);
+        let created_at = Time::now();
         s.created_at(created_at);
         let registration_timeout = created_at
             .wrapping_add(RegisterMasterKey::REGISTRATION_TIMEOUT)
             .into();
         s.registration_timeout(registration_timeout);
 
-        s
+        Ok(s)
+    }
+
+    fn alias(&mut self, alias: &str) {
+        self.0[ALIAS_INDEX..(ALIAS_INDEX + alias.len())].copy_from_slice(alias.as_bytes());
     }
 
     fn created_at(&mut self, time: Time) {
@@ -178,6 +198,16 @@ impl<'a> RegisterMasterKeySlice<'a> {
         self.0[KEY_INDEX..KEY_END].try_into().expect("key")
     }
 
+    pub fn alias(&self) -> Cow<'a, str> {
+        let slice = &self.0[ALIAS_INDEX..ALIAS_END];
+        let mut split = slice.split(|x| x == &0x00);
+        if let Some(slice) = split.next() {
+            String::from_utf8_lossy(slice)
+        } else {
+            Cow::Owned(String::new())
+        }
+    }
+
     pub fn created_at(&self) -> Time {
         u32::from_be_bytes(
             self.0[CREATED_AT_INDEX..CREATED_AT_END]
@@ -209,6 +239,10 @@ impl<'a> RegisterMasterKeySlice<'a> {
     }
 }
 
+fn check_alias(alias: &str) -> bool {
+    alias.len() <= (ALIAS_END - ALIAS_INDEX) && alias.is_ascii()
+}
+
 impl<'a> TryFrom<&'a [u8]> for RegisterMasterKeySlice<'a> {
     type Error = RegisterMasterKeyError;
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
@@ -228,6 +262,7 @@ impl<'a> fmt::Debug for RegisterMasterKeySlice<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RegisterMasterKeySlice")
             .field("key", &self.key())
+            .field("alias", &self.alias())
             .field("created_at", &self.created_at())
             .field("registration_timeout", &self.registration_timeout())
             .field("signature", &self.signature())
@@ -239,6 +274,7 @@ impl fmt::Debug for RegisterMasterKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RegisterMasterKey")
             .field("key", &self.key())
+            .field("alias", &self.alias())
             .field("created_at", &self.created_at())
             .field("registration_timeout", &self.registration_timeout())
             .field("signature", &self.signature())
@@ -251,12 +287,15 @@ mod tests {
     use super::*;
     use quickcheck::{Arbitrary, Gen};
 
+    const ALIASES: &[&str] = &["", "alias", "01234567890123456789012345678901"];
+
     impl Arbitrary for RegisterMasterKey {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
             let sk = SecretKey::arbitrary(g);
+            let alias = ALIASES[usize::arbitrary(g) % ALIASES.len()];
 
             let mut bytes = [0; Self::SIZE];
-            let builder = RegisterMasterKeyMut::new(&mut bytes);
+            let builder = RegisterMasterKeyMut::new(&mut bytes, alias).expect("valid entry");
 
             let _ = builder.finalize(&sk);
 
@@ -268,7 +307,7 @@ mod tests {
     fn register_master_key_size() {
         assert_eq!(
             RegisterMasterKey::SIZE,
-            104,
+            136,
             "expecting a constant size for the RegisterMasterKey and that it should be documented"
         );
     }

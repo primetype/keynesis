@@ -60,7 +60,7 @@ impl<'a> ContentMut<'a> {
         Content(self.0.to_owned().into_boxed_slice())
     }
 
-    pub(crate) fn push(&mut self, entry: &EntrySlice<'_>) -> Result<(), ContentError> {
+    pub(crate) fn push(&mut self, entry: EntrySlice<'_>) -> Result<(), ContentError> {
         let current_size = self.0.len();
         let needed_size = current_size + entry.as_ref().len();
         if needed_size > Content::MAX_SIZE {
@@ -196,7 +196,7 @@ impl Deref for Content {
 mod tests {
     use super::*;
     use crate::{
-        key::ed25519::{PublicKey, SecretKey},
+        key::{curve25519, ed25519::PublicKey},
         passport::block::{Entry, EntryMut},
         Seed,
     };
@@ -210,7 +210,7 @@ mod tests {
 
             for _ in 0..max {
                 let entry = Entry::arbitrary(g);
-                match content.push(&entry.as_slice()) {
+                match content.push(entry.as_slice()) {
                     Ok(()) => (),
                     Err(ContentError::MaxSizeReached) => break,
                     Err(error) => {
@@ -248,7 +248,7 @@ mod tests {
 
         for _ in 0..max {
             let mut entry_bytes = Vec::with_capacity(1024);
-            let key = SecretKey::arbitrary(&mut rng);
+            let key = curve25519::SecretKey::arbitrary(&mut rng);
             let mut builder = EntryMut::new_set_shared_key(&mut entry_bytes, &key.public_key());
             let passphrase = Option::<Seed>::arbitrary(&mut rng);
             let mut entry_rng = Seed::arbitrary(&mut rng).into_rand_chacha();
@@ -266,7 +266,7 @@ mod tests {
             }
 
             let entry = builder.finalize().expect("valid key sharing entry");
-            match content.push(&entry) {
+            match content.push(entry) {
                 Ok(()) => (),
                 Err(ContentError::MaxSizeReached) => break,
                 Err(error) => {

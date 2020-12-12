@@ -90,7 +90,7 @@ impl BlockMut {
         ContentMut::new(&mut self.0)
     }
 
-    pub fn push(&mut self, entry: &EntrySlice<'_>) -> Result<(), BlockError> {
+    pub fn push(&mut self, entry: EntrySlice<'_>) -> Result<(), BlockError> {
         Ok(self.content_mut().push(entry)?)
     }
 
@@ -222,7 +222,7 @@ mod tests {
             let max = usize::arbitrary(g) % 12;
             for _ in 0..max {
                 let entry = Entry::arbitrary(g);
-                match block.push(&entry.as_slice()) {
+                match block.push(entry.as_slice()) {
                     Ok(()) => (),
                     Err(BlockError::Content(ContentError::MaxSizeReached)) => break,
                     Err(error) => {

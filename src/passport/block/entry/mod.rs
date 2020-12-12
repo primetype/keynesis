@@ -13,7 +13,10 @@ pub use self::{
     shared_key::{SetSharedKey, SetSharedKeyError, SetSharedKeyMut, SetSharedKeySlice},
 };
 use crate::{
-    key::ed25519::{PublicKey, SecretKey},
+    key::{
+        curve25519,
+        ed25519::{PublicKey, SecretKey},
+    },
     Seed,
 };
 use rand_core::{CryptoRng, RngCore};
@@ -136,7 +139,7 @@ impl Entry {
 }
 
 impl<'a> EntryMut<RegisterMasterKeyMut<'a>> {
-    pub fn new_register_master_key(slice: &'a mut [u8]) -> Self {
+    pub fn new_register_master_key(slice: &'a mut [u8], alias: &str) -> Result<Self, EntryError> {
         assert!(slice.len() == EntryType::RegisterMasterKey.size(&[]));
 
         slice[ENTRY_TYPE_INDEX..ENTRY_TYPE_END]
@@ -144,13 +147,13 @@ impl<'a> EntryMut<RegisterMasterKeyMut<'a>> {
 
         let slice_ptr = slice.as_mut_ptr();
         let slice_size = slice.len();
-        let t = RegisterMasterKeyMut::new(&mut slice[ENTRY_TYPE_END..]);
+        let t = RegisterMasterKeyMut::new(&mut slice[ENTRY_TYPE_END..], alias)?;
 
-        Self {
+        Ok(Self {
             slice_ptr,
             slice_size,
             t,
-        }
+        })
     }
 
     pub fn finalize(self, author: &SecretKey) -> EntrySlice<'a> {
@@ -190,7 +193,7 @@ impl<'a> EntryMut<DeregisterMasterKeyMut<'a>> {
 }
 
 impl<'a> EntryMut<SetSharedKeyMut<'a>> {
-    pub fn new_set_shared_key(slice: &'a mut Vec<u8>, key: &PublicKey) -> Self {
+    pub fn new_set_shared_key(slice: &'a mut Vec<u8>, key: &curve25519::PublicKey) -> Self {
         slice.extend_from_slice(&EntryType::SetSharedKey.to_u16().to_be_bytes());
 
         let slice_ptr = slice.as_mut_ptr();
@@ -207,7 +210,7 @@ impl<'a> EntryMut<SetSharedKeyMut<'a>> {
     pub fn share_with<RNG>(
         &mut self,
         rng: &mut RNG,
-        key: &SecretKey,
+        key: &curve25519::SecretKey,
         to: &PublicKey,
         passphrase: &Option<Seed>,
     ) -> Result<(), EntryError>
@@ -406,6 +409,8 @@ mod tests {
         }
     }
 
+    const ALIASES: &[&str] = &["", "alias", "01234567890123456789012345678901"];
+
     impl Arbitrary for Entry {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
             let t = EntryType::arbitrary(g);
@@ -415,7 +420,10 @@ mod tests {
                 EntryType::RegisterMasterKey => {
                     bytes = vec![0; t.size(&[])];
                     let sk = SecretKey::arbitrary(g);
-                    let _ = EntryMut::new_register_master_key(&mut bytes).finalize(&sk);
+                    let alias = ALIASES[usize::arbitrary(g) % ALIASES.len()];
+                    let _ = EntryMut::new_register_master_key(&mut bytes, alias)
+                        .expect("valid alias")
+                        .finalize(&sk);
                 }
                 EntryType::DeregisterMasterKey => {
                     bytes = vec![0; t.size(&[])];
@@ -425,7 +433,7 @@ mod tests {
                 }
                 EntryType::SetSharedKey => {
                     bytes = Vec::with_capacity(1024);
-                    let key = SecretKey::arbitrary(g);
+                    let key = curve25519::SecretKey::arbitrary(g);
                     let mut builder = EntryMut::new_set_shared_key(&mut bytes, &key.public_key());
                     let mut rng = Seed::arbitrary(g).into_rand_chacha();
                     let passphrase = Arbitrary::arbitrary(g);

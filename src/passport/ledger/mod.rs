@@ -2,17 +2,21 @@ use crate::{
     key::ed25519::PublicKey,
     passport::block::{
         entry::{DeregisterMasterKeySlice, RegisterMasterKeySlice, SetSharedKeySlice},
-        BlockSlice, ContentSlice, Hash, HeaderSlice, Previous, Time,
+        BlockSlice, ContentSlice, EntrySlice, Hash, HeaderSlice, Previous, Time,
     },
 };
-use std::collections::BTreeSet;
+use std::{
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct Ledger {
     on_block: Hash,
     at_time: Time,
-    active_master_keys: BTreeSet<PublicKey>,
+    active_master_keys: HashSet<Arc<PublicKey>>,
+    active_master_keys_by_alias: BTreeMap<String, Arc<PublicKey>>,
     shared_key: Option<(Time, PublicKey)>,
 }
 
@@ -35,6 +39,9 @@ pub enum LedgerError {
 
     #[error("The master key was already set")]
     MasterKeyAlreadySet,
+
+    #[error("The master key's alias was already set")]
+    MasterKeyAliasAlreadySet,
 }
 
 impl Ledger {
@@ -50,18 +57,21 @@ impl Ledger {
     /// If the block has a `Previous`, this function will error.
     /// if the block content's does not apply successfully it will error.
     ///
-    pub fn new(block: &BlockSlice<'_>) -> Result<Self, LedgerError> {
+    pub fn new(block: BlockSlice<'_>) -> Result<Self, LedgerError> {
         let header = block.header();
         let mut ledger = Self {
             on_block: header.hash(),
             at_time: header.time(),
-            active_master_keys: BTreeSet::new(),
+            active_master_keys: HashSet::new(),
+            active_master_keys_by_alias: BTreeMap::new(),
             shared_key: None,
         };
 
-        ledger.active_master_keys.insert(header.author());
-
         ledger.apply_content(block.content())?;
+
+        if !ledger.active_master_keys().contains(&header.author()) {
+            unimplemented!()
+        }
 
         Ok(ledger)
     }
@@ -78,8 +88,13 @@ impl Ledger {
     }
 
     /// get the list of active master keys
-    pub fn active_master_keys(&self) -> &BTreeSet<PublicKey> {
+    pub fn active_master_keys(&self) -> &HashSet<Arc<PublicKey>> {
         &self.active_master_keys
+    }
+
+    /// get the
+    pub fn shared_key(&self) -> Option<&(Time, PublicKey)> {
+        self.shared_key.as_ref()
     }
 
     /// apply the given block to the `Ledger`
@@ -115,13 +130,21 @@ impl Ledger {
 
     fn apply_content(&mut self, content: ContentSlice<'_>) -> Result<(), LedgerError> {
         for entry in content {
-            if let Some(master_key) = entry.register_master_key() {
-                self.apply_register_master_key(master_key)?
-            } else if let Some(deregister) = entry.deregister_master_key() {
-                self.apply_deregister_master_key(deregister)?
-            } else if let Some(shared_key) = entry.set_shared_key() {
-                self.apply_shared_key(shared_key)?
-            }
+            self.apply_entry(entry)?;
+        }
+
+        Ok(())
+    }
+
+    fn apply_entry(&mut self, entry: EntrySlice) -> Result<(), LedgerError> {
+        if let Some(master_key) = entry.register_master_key() {
+            self.apply_register_master_key(master_key)?
+        } else if let Some(deregister) = entry.deregister_master_key() {
+            self.apply_deregister_master_key(deregister)?
+        } else if let Some(shared_key) = entry.set_shared_key() {
+            self.apply_shared_key(shared_key)?
+        } else {
+            unimplemented!()
         }
 
         Ok(())
@@ -138,8 +161,17 @@ impl Ledger {
             return Err(LedgerError::CannotRegisterMasterKeyPassedRegistrationTimeout);
         }
 
-        if self.active_master_keys.insert(entry.key()) {
+        let key = Arc::new(entry.key());
+
+        if !self.active_master_keys.insert(Arc::clone(&key)) {
             return Err(LedgerError::MasterKeyAlreadySet);
+        }
+        if self
+            .active_master_keys_by_alias
+            .insert(entry.alias().into_owned(), key)
+            .is_some()
+        {
+            return Err(LedgerError::MasterKeyAliasAlreadySet);
         }
 
         Ok(())

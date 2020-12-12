@@ -1,5 +1,8 @@
 use crate::{
-    key::ed25519::{PublicKey, SecretKey},
+    key::{
+        curve25519,
+        ed25519::{PublicKey, SecretKey},
+    },
     noise::{HandshakeStateError, N},
     passport::block::Time,
     Seed,
@@ -48,8 +51,8 @@ pub enum SetSharedKeyError {
 
 impl SetSharedKey {
     pub const MIN_SIZE: usize = CREATED_AT_END;
-    const MSG_SIZE: usize = PublicKey::SIZE + SecretKey::SIZE + 16;
-    const ID_SIZE: usize = 8;
+    pub const MSG_SIZE: usize = PublicKey::SIZE + SecretKey::SIZE + 16;
+    pub const ID_SIZE: usize = 8;
 
     pub fn size(slice: &[u8]) -> usize {
         let count = *slice
@@ -80,7 +83,7 @@ impl SetSharedKey {
 }
 
 impl<'a> SetSharedKeyMut<'a> {
-    pub fn new(bytes: &'a mut Vec<u8>, key: &PublicKey) -> Self {
+    pub fn new(bytes: &'a mut Vec<u8>, key: &curve25519::PublicKey) -> Self {
         let start_index = bytes.len();
         bytes.push(0);
         bytes.extend_from_slice(key.as_ref());
@@ -92,7 +95,7 @@ impl<'a> SetSharedKeyMut<'a> {
     pub fn share_with<RNG>(
         &mut self,
         rng: &mut RNG,
-        key: &SecretKey,
+        key: &curve25519::SecretKey,
         to: &PublicKey,
         passphrase: &Option<Seed>,
     ) -> Result<(), SetSharedKeyError>
@@ -150,7 +153,6 @@ impl<'a> SetSharedKeySlice<'a> {
     /// matches the header's signed data and the author
     pub fn try_from_slice(slice: &'a [u8]) -> Result<Self, SetSharedKeyError> {
         if slice.len() < SetSharedKey::MIN_SIZE {
-            dbg!(slice.len(), SetSharedKey::MIN_SIZE);
             return Err(SetSharedKeyError::InvalidLength);
         }
 
@@ -160,7 +162,6 @@ impl<'a> SetSharedKeySlice<'a> {
         let len = SetSharedKey::MIN_SIZE + count * (SetSharedKey::MSG_SIZE + SetSharedKey::ID_SIZE);
 
         if len != slice.len() {
-            dbg!(slice.len(), len);
             return Err(SetSharedKeyError::InvalidLength);
         }
 
@@ -260,7 +261,7 @@ mod tests {
     impl Arbitrary for SetSharedKey {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
             let mut bytes = Vec::with_capacity(1024);
-            let key = SecretKey::arbitrary(g);
+            let key = curve25519::SecretKey::arbitrary(g);
             let mut builder = SetSharedKeyMut::new(&mut bytes, &key.public_key());
             let mut rng = Seed::arbitrary(g).into_rand_chacha();
             let passphrase = Arbitrary::arbitrary(g);
@@ -299,7 +300,7 @@ mod tests {
         let g = &mut g;
 
         let mut bytes = Vec::with_capacity(1024);
-        let key = SecretKey::arbitrary(g);
+        let key = curve25519::SecretKey::arbitrary(g);
         let mut builder = SetSharedKeyMut::new(&mut bytes, &key.public_key());
         let passphrase = Arbitrary::arbitrary(g);
         let mut rng = Seed::arbitrary(g).into_rand_chacha();
