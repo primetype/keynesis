@@ -28,8 +28,19 @@ use rand_core::{CryptoRng, RngCore};
 use std::{convert::TryFrom as _, vec};
 use thiserror::Error;
 
+/// light representation of the passport
+///
+/// mainly needed to hold buddies' passports since we
+/// don't need to have all the content of the passport
+/// but only a valid state.
 pub struct LightPassport(Ledger);
 
+/// a passport that can be mutated and that contains all
+/// the necessary content of the passport (since it holds
+/// each blocks in memory too).
+///
+/// To keep close when we want to apply modifications to
+/// a passport or access shared secrets
 pub struct Passport {
     ledger: Ledger,
 
@@ -78,10 +89,14 @@ pub enum PassportError {
 }
 
 impl LightPassport {
+    /// create a passport from the given block
+    ///
+    /// expecting this block to be the genesis of the passport
     pub fn new(block: BlockSlice) -> Result<Self, PassportError> {
         Ledger::new(block).map(Self).map_err(PassportError::from)
     }
 
+    /// update the state of the passport with the given data of the passport
     pub fn update(&mut self, block: BlockSlice) -> Result<(), PassportError> {
         self.0 = self.0.apply(block)?;
         Ok(())
