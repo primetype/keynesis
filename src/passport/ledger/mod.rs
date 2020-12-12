@@ -109,7 +109,7 @@ impl Ledger {
         Ok(ledger)
     }
 
-    fn apply_header(&self, header: HeaderSlice<'_>) -> Result<Self, LedgerError> {
+    pub(crate) fn apply_header(&self, header: HeaderSlice<'_>) -> Result<Self, LedgerError> {
         if let Previous::Previous(previous) = header.previous() {
             if previous != self.on_block {
                 return Err(LedgerError::PreviousHashMisMatch);
@@ -136,7 +136,7 @@ impl Ledger {
         Ok(())
     }
 
-    fn apply_entry(&mut self, entry: EntrySlice) -> Result<(), LedgerError> {
+    pub(crate) fn apply_entry(&mut self, entry: EntrySlice) -> Result<(), LedgerError> {
         if let Some(master_key) = entry.register_master_key() {
             self.apply_register_master_key(master_key)?
         } else if let Some(deregister) = entry.deregister_master_key() {
@@ -183,9 +183,6 @@ impl Ledger {
     ) -> Result<(), LedgerError> {
         if self.at_time < entry.created_at() {
             return Err(LedgerError::InvalidEntryTime);
-        }
-        if !self.active_master_keys.contains(&entry.author()) {
-            return Err(LedgerError::PrivilegeError);
         }
 
         if self.active_master_keys.remove(&entry.key()) {

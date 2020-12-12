@@ -46,6 +46,7 @@ pub struct EntryMut<T> {
     t: T,
 }
 
+#[derive(Copy, Clone)]
 pub struct EntrySlice<'a>(&'a [u8]);
 
 #[derive(Debug, Error)]
@@ -183,8 +184,8 @@ impl<'a> EntryMut<DeregisterMasterKeyMut<'a>> {
         }
     }
 
-    pub fn finalize(self, author: &SecretKey) -> EntrySlice<'a> {
-        let _ = self.t.finalize(author);
+    pub fn finalize(self) -> EntrySlice<'a> {
+        let _ = self.t.finalize();
 
         let slice = unsafe { std::slice::from_raw_parts(self.slice_ptr, self.slice_size) };
 
@@ -427,9 +428,8 @@ mod tests {
                 }
                 EntryType::DeregisterMasterKey => {
                     bytes = vec![0; t.size(&[])];
-                    let sk = SecretKey::arbitrary(g);
                     let key = PublicKey::arbitrary(g);
-                    let _ = EntryMut::new_deregister_master_key(&mut bytes, &key).finalize(&sk);
+                    let _ = EntryMut::new_deregister_master_key(&mut bytes, &key).finalize();
                 }
                 EntryType::SetSharedKey => {
                     bytes = Vec::with_capacity(1024);

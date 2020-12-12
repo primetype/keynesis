@@ -6,10 +6,12 @@ associated keys only. Making it a permission blockchain.
 */
 
 pub mod block;
+mod builder;
 pub mod ledger;
 
+pub use self::builder::PassportMut;
 use self::{
-    block::{Block, BlockMut, Time},
+    block::{Block, Time},
     ledger::Ledger,
 };
 use crate::{
@@ -20,11 +22,13 @@ use crate::{
     noise::{HandshakeStateError, N},
     Seed,
 };
-use block::EntryMut;
+use block::BlockSlice;
 use cryptoxide::blake2b::Blake2b;
 use rand_core::{CryptoRng, RngCore};
 use std::{convert::TryFrom as _, vec};
 use thiserror::Error;
+
+pub struct LightPassport(Ledger);
 
 pub struct Passport {
     ledger: Ledger,
@@ -73,6 +77,27 @@ pub enum PassportError {
     NoSharedKeyFound,
 }
 
+impl LightPassport {
+    pub fn new(block: BlockSlice) -> Result<Self, PassportError> {
+        Ledger::new(block).map(Self).map_err(PassportError::from)
+    }
+
+    pub fn update(&mut self, block: BlockSlice) -> Result<(), PassportError> {
+        self.0 = self.0.apply(block)?;
+        Ok(())
+    }
+
+    /// get the `Passport` shared key
+    ///
+    /// This key is a key that all the master keys are aware of and can
+    /// be used. Every time a master key is added or removed, a new key
+    /// is generated. Please use the most recent version, otherwise the
+    /// recipient may not see the new keys
+    pub fn shared_key(&self) -> Option<&(Time, PublicKey)> {
+        self.0.shared_key()
+    }
+}
+
 impl Passport {
     /// create a new passport
     ///
@@ -94,138 +119,27 @@ impl Passport {
     where
         RNG: CryptoRng + RngCore,
     {
-        let mut block = BlockMut::new();
-        block.version(block::Version::CURRENT);
-        block.time(block::Time::now());
-        block.previous(&block::Previous::None);
+        let mut builder = builder::PassportBuilder::new();
 
-        // set alias to the block's author
-        {
-            let mut entry = vec![0; block::EntryType::RegisterMasterKey.size(&[])];
-            let entry = EntryMut::new_register_master_key(&mut entry, alias)?;
-            let entry = entry.finalize(author);
-            block.push(entry)?;
-        }
+        builder.add_master_key(alias, author)?;
+        builder.rotate_shared_key(rng, passphrase)?;
 
-        // create entry with new shared secret key
-        {
-            let new_key = curve25519::SecretKey::new(rng);
-            let mut entry = Vec::with_capacity(256);
-            let mut entry = EntryMut::new_set_shared_key(&mut entry, &new_key.public_key());
-            entry.share_with(rng, &new_key, &author.public_key(), &Some(passphrase))?;
-            let entry = entry.finalize()?;
-            block.push(entry)?;
-        }
+        builder.finalize(author)
+    }
 
-        // finalize the block
-        let block = block.finalize(author);
-
+    pub(crate) fn new(block: Block) -> Result<Self, PassportError> {
         let ledger = Ledger::new(block.as_slice())?;
         let blockchain = vec![block];
 
         Ok(Self { blockchain, ledger })
     }
 
-    /// remove a `master_key`
-    ///
-    /// This function removes the master key from the `master_key` set. Meaning
-    /// no block will be allowed to be created from this `master_key` again.
-    /// the `shared_key` will be rotated too, excluding the `master_key` from
-    /// the recipient list
-    pub fn remove_master_key<RNG>(
-        &mut self,
-        rng: &mut RNG,
-        author: &ed25519::SecretKey,
-        master_key: &ed25519::PublicKey,
-        passphrase: Seed,
-    ) -> Result<&Block, PassportError>
-    where
-        RNG: CryptoRng + RngCore,
-    {
-        let mut block = BlockMut::new();
-        block.version(block::Version::CURRENT);
-        block.time(block::Time::now());
-        block.previous(&block::Previous::Previous(self.ledger.hash()));
-
-        // set alias to the block's author
-        {
-            let mut entry = vec![0; block::EntryType::DeregisterMasterKey.size(&[])];
-            let entry = EntryMut::new_deregister_master_key(&mut entry, master_key);
-            let entry = entry.finalize(author);
-            block.push(entry)?;
-        }
-
-        let entry = self.rotate_shared_key_(
-            rng,
-            passphrase,
-            self.ledger
-                .active_master_keys()
-                .iter()
-                .map(|k| k.as_ref())
-                // make sure the master_key we are removing is not one
-                // of the key we are going to share the `shared_key` with
-                .filter(|pk| *pk != master_key),
-        )?;
-        block.push(entry.as_slice())?;
-
-        let block = block.finalize(author);
-
-        self.ledger = self.ledger.apply(block.as_slice())?;
-        self.blockchain.push(block);
-
-        Ok(self.blockchain.last().expect("we just added a block"))
+    pub fn as_mut(&mut self) -> PassportMut<'_> {
+        PassportMut::new(self)
     }
 
-    /// add a master key to the passport
-    ///
-    /// This function will automatically rotate the shared key and encrypt
-    /// the secret key to all the master keys of the passport.
-    ///
-    pub fn add_master_key<RNG>(
-        &mut self,
-        rng: &mut RNG,
-        author: &ed25519::SecretKey,
-
-        // todo: only wants the registration entry here, not the secret key
-        master_key: &ed25519::SecretKey,
-        alias: &str,
-        passphrase: Seed,
-    ) -> Result<&Block, PassportError>
-    where
-        RNG: CryptoRng + RngCore,
-    {
-        let mut block = BlockMut::new();
-        block.version(block::Version::CURRENT);
-        block.time(block::Time::now());
-        block.previous(&block::Previous::Previous(self.ledger.hash()));
-
-        // set alias to the block's author
-        {
-            let mut entry = vec![0; block::EntryType::RegisterMasterKey.size(&[])];
-            let entry = EntryMut::new_register_master_key(&mut entry, alias)?;
-            let entry = entry.finalize(master_key);
-            block.push(entry)?;
-        }
-
-        let entry = self.rotate_shared_key_(
-            rng,
-            passphrase,
-            self.ledger
-                .active_master_keys()
-                .iter()
-                .map(|k| k.as_ref())
-                // include the newly added master key in the set of key to share
-                // the new shared key with
-                .chain(std::iter::once(&master_key.public_key())),
-        )?;
-        block.push(entry.as_slice())?;
-
-        let block = block.finalize(author);
-
-        self.ledger = self.ledger.apply(block.as_slice())?;
-        self.blockchain.push(block);
-
-        Ok(self.blockchain.last().expect("we just added a block"))
+    pub fn into_light_passport(self) -> LightPassport {
+        LightPassport(self.ledger)
     }
 
     /// get the `Passport` shared key
@@ -236,61 +150,6 @@ impl Passport {
     /// recipient may not see the new keys
     pub fn shared_key(&self) -> Option<&(Time, PublicKey)> {
         self.ledger.shared_key()
-    }
-
-    /// force rotating the shared secret key
-    ///
-    /// Event though we might not add/remove master keys, after a certain
-    /// time it might be worth considering rotating the shared key.
-    ///
-    pub fn rotate_shared_key<RNG>(
-        &mut self,
-        rng: &mut RNG,
-        author: &ed25519::SecretKey,
-        passphrase: Seed,
-    ) -> Result<&Block, PassportError>
-    where
-        RNG: CryptoRng + RngCore,
-    {
-        let mut block = BlockMut::new();
-        block.version(block::Version::CURRENT);
-        block.time(block::Time::now());
-        block.previous(&block::Previous::Previous(self.ledger.hash()));
-
-        let entry = self.rotate_shared_key_(
-            rng,
-            passphrase,
-            self.ledger.active_master_keys().iter().map(|k| k.as_ref()),
-        )?;
-        block.push(entry.as_slice())?;
-
-        let block = block.finalize(author);
-
-        self.ledger = self.ledger.apply(block.as_slice())?;
-        self.blockchain.push(block);
-
-        Ok(self.blockchain.last().expect("we just added a block"))
-    }
-
-    fn rotate_shared_key_<'a, RNG>(
-        &'a self,
-        rng: &mut RNG,
-        passphrase: Seed,
-        keys: impl Iterator<Item = &'a PublicKey>,
-    ) -> Result<block::Entry, PassportError>
-    where
-        RNG: CryptoRng + RngCore,
-    {
-        let new_key = curve25519::SecretKey::new(rng);
-        let mut entry = Vec::with_capacity(256);
-        let mut entry = EntryMut::new_set_shared_key(&mut entry, &new_key.public_key());
-        let passphrase = Some(passphrase);
-        for key in keys {
-            //self.ledger.active_master_keys().iter() {
-            entry.share_with(rng, &new_key, key, &passphrase)?;
-        }
-        let entry = entry.finalize()?;
-        Ok(entry.to_entry())
     }
 
     /// access the shared key (associated to the public key given in parameter) with
@@ -382,48 +241,14 @@ mod tests {
         let (_, pub_key) = passport.shared_key().expect("should always be true");
 
         let shared_key = passport
-            .unshield_shared_key(pub_key, &author, passphrase.clone())
+            .unshield_shared_key(pub_key, &author, passphrase)
             .expect("Decode the key");
 
         assert_eq!(pub_key, &shared_key.public_key());
 
         passport
-            .remove_master_key(&mut rng, &author, &author.public_key(), passphrase)
+            .as_mut()
+            .remove_master_key(&author.public_key())
             .unwrap();
-
-        assert!(passport.ledger.active_master_keys().is_empty());
-    }
-
-    #[test]
-    fn remove_master_key() {
-        let mut rng = Seed::from([0; 32]).into_rand_chacha();
-
-        let author = ed25519::SecretKey::new(&mut rng);
-        let passphrase = Seed::generate(&mut rng);
-        let alias = "device1";
-
-        let mut passport = Passport::create(&mut rng, alias, &author, passphrase.clone())
-            .expect("Create a valid passport");
-        let (_, pub_key) = passport.shared_key().expect("should always be true");
-
-        let shared_key = passport
-            .unshield_shared_key(pub_key, &author, passphrase.clone())
-            .expect("Decode the key");
-
-        assert_eq!(pub_key, &shared_key.public_key());
-
-        let author2 = ed25519::SecretKey::new(&mut rng);
-        passport
-            .add_master_key(&mut rng, &author, &author2, "device2", passphrase.clone())
-            .unwrap();
-
-        passport
-            .remove_master_key(&mut rng, &author, &author.public_key(), passphrase)
-            .unwrap();
-
-        assert!(passport
-            .ledger
-            .active_master_keys()
-            .contains(&author2.public_key()));
     }
 }

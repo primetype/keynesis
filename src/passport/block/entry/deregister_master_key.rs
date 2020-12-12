@@ -1,7 +1,4 @@
-use crate::{
-    key::ed25519::{PublicKey, SecretKey, Signature},
-    passport::block::Time,
-};
+use crate::{key::ed25519::PublicKey, passport::block::Time};
 use std::{
     convert::{TryFrom, TryInto as _},
     fmt::{self, Formatter},
@@ -12,10 +9,6 @@ const KEY_INDEX: usize = 0;
 const KEY_END: usize = KEY_INDEX + PublicKey::SIZE;
 const CREATED_AT_INDEX: usize = KEY_END;
 const CREATED_AT_END: usize = CREATED_AT_INDEX + Time::SIZE;
-const AUTHOR_INDEX: usize = CREATED_AT_END;
-const AUTHOR_END: usize = AUTHOR_INDEX + PublicKey::SIZE;
-const SIGNATURE_INDEX: usize = AUTHOR_END;
-const SIGNATURE_END: usize = SIGNATURE_INDEX + Signature::SIZE;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct DeregisterMasterKey([u8; Self::SIZE]);
@@ -35,7 +28,7 @@ pub enum DeregisterMasterKeyError {
 }
 
 impl DeregisterMasterKey {
-    pub const SIZE: usize = SIGNATURE_END;
+    pub const SIZE: usize = CREATED_AT_END;
 
     #[inline(always)]
     pub fn as_slice(&self) -> DeregisterMasterKeySlice<'_> {
@@ -50,16 +43,6 @@ impl DeregisterMasterKey {
     #[inline(always)]
     pub fn created_at(&self) -> Time {
         self.as_slice().created_at()
-    }
-
-    #[inline(always)]
-    pub fn author(&self) -> PublicKey {
-        self.as_slice().author()
-    }
-
-    #[inline(always)]
-    pub fn signature(&self) -> Signature {
-        self.as_slice().signature()
     }
 }
 
@@ -83,14 +66,8 @@ impl<'a> DeregisterMasterKeyMut<'a> {
         self.0[KEY_INDEX..KEY_END].copy_from_slice(key.as_ref())
     }
 
-    pub fn finalize(self, author: &SecretKey) -> DeregisterMasterKeySlice<'a> {
+    pub fn finalize(self) -> DeregisterMasterKeySlice<'a> {
         let slice = self.0;
-        let pk = author.public_key();
-
-        slice[AUTHOR_INDEX..AUTHOR_END].copy_from_slice(pk.as_ref());
-        let signature = author.sign(&slice[KEY_INDEX..SIGNATURE_INDEX]);
-
-        slice[SIGNATURE_INDEX..SIGNATURE_END].copy_from_slice(signature.as_ref());
 
         DeregisterMasterKeySlice::from_slice_unchecked(slice)
     }
@@ -109,23 +86,12 @@ impl<'a> DeregisterMasterKeySlice<'a> {
 
     /// Create a DeregisterMasterKeySlice from the given slice
     ///
-    /// This function will check the lengths, the version
-    /// is a valid version (not a forbidden one), the signature
-    /// matches the header's signed data and the author
     pub fn try_from_slice(slice: &'a [u8]) -> Result<Self, DeregisterMasterKeyError> {
         if slice.len() != DeregisterMasterKey::SIZE {
             return Err(DeregisterMasterKeyError::InvalidLength);
         }
 
         let register_master_key = Self::from_slice_unchecked(slice);
-
-        let signature = register_master_key.signature();
-        let author = register_master_key.author();
-        let signed_data = register_master_key.proof_data();
-
-        if !author.verify(signed_data, &signature) {
-            return Err(DeregisterMasterKeyError::InvalidSignature);
-        }
 
         Ok(register_master_key)
     }
@@ -160,22 +126,6 @@ impl<'a> DeregisterMasterKeySlice<'a> {
         )
         .into()
     }
-
-    pub fn author(&self) -> PublicKey {
-        self.0[AUTHOR_INDEX..AUTHOR_END].try_into().expect("author")
-    }
-
-    /// data to use to sign/verify
-    #[inline(always)]
-    pub fn proof_data(&self) -> &[u8] {
-        &self.0[KEY_INDEX..SIGNATURE_INDEX]
-    }
-
-    pub fn signature(&self) -> Signature {
-        self.0[SIGNATURE_INDEX..SIGNATURE_END]
-            .try_into()
-            .expect("signature")
-    }
 }
 
 impl<'a> TryFrom<&'a [u8]> for DeregisterMasterKeySlice<'a> {
@@ -198,8 +148,6 @@ impl<'a> fmt::Debug for DeregisterMasterKeySlice<'a> {
         f.debug_struct("DeregisterMasterKeySlice")
             .field("key", &self.key())
             .field("created_at", &self.created_at())
-            .field("author", &self.author())
-            .field("signature", &self.signature())
             .finish()
     }
 }
@@ -209,8 +157,6 @@ impl fmt::Debug for DeregisterMasterKey {
         f.debug_struct("DeregisterMasterKey")
             .field("key", &self.key())
             .field("created_at", &self.created_at())
-            .field("author", &self.author())
-            .field("signature", &self.signature())
             .finish()
     }
 }
@@ -222,13 +168,12 @@ mod tests {
 
     impl Arbitrary for DeregisterMasterKey {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            let sk = SecretKey::arbitrary(g);
             let key = PublicKey::arbitrary(g);
 
             let mut bytes = [0; Self::SIZE];
             let builder = DeregisterMasterKeyMut::new(&mut bytes, &key);
 
-            let _ = builder.finalize(&sk);
+            let _ = builder.finalize();
 
             Self::try_from(bytes).expect("valid header")
         }
@@ -238,7 +183,7 @@ mod tests {
     fn register_master_key_size() {
         assert_eq!(
             DeregisterMasterKey::SIZE,
-            132,
+            36,
             "expecting a constant size for the DeregisterMasterKey and that it should be documented"
         );
     }
