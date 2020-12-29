@@ -33,6 +33,7 @@ use thiserror::Error;
 /// mainly needed to hold buddies' passports since we
 /// don't need to have all the content of the passport
 /// but only a valid state.
+#[derive(Clone)]
 pub struct LightPassport(Ledger);
 
 /// a passport that can be mutated and that contains all
@@ -41,6 +42,7 @@ pub struct LightPassport(Ledger);
 ///
 /// To keep close when we want to apply modifications to
 /// a passport or access shared secrets
+#[derive(Clone)]
 pub struct Passport {
     ledger: Ledger,
 
