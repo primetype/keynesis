@@ -18,10 +18,37 @@ impl Hash {
 }
 
 impl Hasher {
+    pub fn new() -> Self {
+        Self(Blake2b::new(Hash::SIZE))
+    }
+
+    pub fn update(&mut self, input: impl AsRef<[u8]>) {
+        use cryptoxide::digest::Digest as _;
+        self.0.input(input.as_ref());
+    }
+
+    pub fn result(&mut self) -> Hash {
+        use cryptoxide::digest::Digest as _;
+
+        let mut output = Hash::ZERO;
+        self.0.result(&mut output.0);
+        output
+    }
+
+    pub fn reset(&mut self) {
+        self.0.reset()
+    }
+
     pub fn hash(input: impl AsRef<[u8]>) -> Hash {
         let mut output = Hash::ZERO;
         Blake2b::blake2b(&mut output.0, input.as_ref(), &[]);
         output
+    }
+}
+
+impl Default for Hasher {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -92,6 +119,19 @@ mod tests {
             g.fill_bytes(&mut hash.0);
             hash
         }
+    }
+
+    #[quickcheck]
+    fn hasher_new_hash(bytes1: Vec<u8>, bytes2: Vec<u8>) -> bool {
+        let mut bytes = Vec::with_capacity(bytes1.len() + bytes2.len());
+        bytes.extend_from_slice(bytes1.as_slice());
+        bytes.extend_from_slice(bytes2.as_slice());
+
+        let mut hasher = Hasher::new();
+        hasher.update(bytes1);
+        hasher.update(bytes2);
+
+        Hasher::hash(bytes) == hasher.result()
     }
 
     #[quickcheck]

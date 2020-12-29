@@ -1,4 +1,5 @@
-use cryptoxide::{blake2b::Blake2b, blake2s::Blake2s, digest::Digest};
+pub use cryptoxide::digest::Digest;
+pub use cryptoxide::{blake2b::Blake2b, blake2s::Blake2s};
 
 pub trait Hash {
     const HASH_LEN: usize;
