@@ -255,13 +255,6 @@ mod tests {
 
         let mut passport = Passport::create(&mut rng, alias, &author, passphrase.clone())
             .expect("Create a valid passport");
-        let (_, pub_key) = passport.shared_key().expect("should always be true");
-
-        let shared_key = passport
-            .unshield_shared_key(pub_key, &author, passphrase)
-            .expect("Decode the key");
-
-        assert_eq!(pub_key, &shared_key.public_key());
 
         passport
             .as_mut()

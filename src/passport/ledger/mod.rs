@@ -186,7 +186,11 @@ impl Ledger {
         }
 
         if self.active_master_keys.remove(&entry.key()) {
-            Ok(())
+            if self.active_master_keys.is_empty() {
+                Err(LedgerError::CannotDeregisterMasterKey)
+            } else {
+                Ok(())
+            }
         } else {
             Err(LedgerError::CannotDeregisterMasterKey)
         }
