@@ -457,9 +457,7 @@ impl<'a> TryFrom<&'a [u8]> for SecretKey {
                 // derived keys may overflow as per the bip32 paper. However if the
                 // key is expected to be a root key, the check_3rd_highest_bit function
                 // needs called to make sure the structure is valid.
-                let chain_code = ChainCode::try_from(
-                    &bytes[ed25519_extended::SecretKey::SIZE..]
-                )?;
+                let chain_code = ChainCode::try_from(&bytes[ed25519_extended::SecretKey::SIZE..])?;
                 Ok(Self { key, chain_code })
             }
             Err(ed25519_extended::SecretKeyError::InvalidSize) => {

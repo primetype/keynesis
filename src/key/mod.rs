@@ -75,10 +75,10 @@ encryption_context.process(message, &mut encrypted);
 
 */
 
+pub mod curve25519;
 pub mod ed25519;
 pub mod ed25519_extended;
 pub mod ed25519_hd;
-pub mod curve25519;
 mod shared_secret;
 
 pub use self::shared_secret::SharedSecret;
