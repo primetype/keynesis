@@ -524,21 +524,23 @@ mod tests {
     use quickcheck::{Arbitrary, Gen, TestResult};
 
     impl Arbitrary for ChainCode {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let mut s = Self::zero();
-            g.fill_bytes(&mut s.0);
+            s.0.iter_mut().for_each(|byte| {
+                *byte = u8::arbitrary(g);
+            });
             s
         }
     }
 
     impl Arbitrary for PublicKey {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             SecretKey::arbitrary(g).public_key()
         }
     }
 
     impl Arbitrary for SecretKey {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let key = ed25519_extended::SecretKey::arbitrary(g);
             let chain_code = ChainCode::arbitrary(g);
 

@@ -290,7 +290,7 @@ mod tests {
     const ALIASES: &[&str] = &["", "alias", "01234567890123456789012345678901"];
 
     impl Arbitrary for RegisterMasterKey {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let sk = SecretKey::arbitrary(g);
             let alias = ALIASES[usize::arbitrary(g) % ALIASES.len()];
 

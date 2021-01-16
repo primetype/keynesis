@@ -110,9 +110,11 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for Seed {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let mut bytes = [0; Self::SIZE];
-            g.fill_bytes(&mut bytes);
+            bytes.iter_mut().for_each(|byte| {
+                *byte = u8::arbitrary(g);
+            });
             Self(bytes)
         }
     }

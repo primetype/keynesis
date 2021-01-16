@@ -114,9 +114,11 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for Hash {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let mut hash = Self::ZERO;
-            g.fill_bytes(&mut hash.0);
+            hash.0.iter_mut().for_each(|byte| {
+                *byte = u8::arbitrary(g);
+            });
             hash
         }
     }

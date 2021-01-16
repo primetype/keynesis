@@ -215,7 +215,7 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for Block {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let author = SecretKey::arbitrary(g);
             let mut block = BlockMut::new();
 

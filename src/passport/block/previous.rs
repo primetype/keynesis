@@ -25,7 +25,7 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for Previous {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             if bool::arbitrary(g) {
                 Previous::None
             } else {

@@ -259,14 +259,17 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for SetSharedKey {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let mut bytes = Vec::with_capacity(1024);
             let key = curve25519::SecretKey::arbitrary(g);
             let mut builder = SetSharedKeyMut::new(&mut bytes, &key.public_key());
             let mut rng = Seed::arbitrary(g).into_rand_chacha();
             let passphrase = Arbitrary::arbitrary(g);
 
-            let count = u8::arbitrary(g).wrapping_add(1);
+            let count = g
+                .choose(&[1u8, 2, 12, 32, 63, u8::MAX])
+                .copied()
+                .expect("Some");
             for _ in 0..count {
                 builder
                     .share_with(&mut rng, &key, &PublicKey::arbitrary(g), &passphrase)
@@ -281,7 +284,7 @@ mod tests {
 
     #[test]
     fn finalize_not_enough() {
-        let mut g = quickcheck::StdThreadGen::new(1024);
+        let mut g = quickcheck::Gen::new(1024);
         let g = &mut g;
 
         let mut bytes = Vec::with_capacity(1024);
@@ -296,7 +299,7 @@ mod tests {
 
     #[test]
     fn share_with_too_many() {
-        let mut g = quickcheck::StdThreadGen::new(1024);
+        let mut g = quickcheck::Gen::new(1024);
         let g = &mut g;
 
         let mut bytes = Vec::with_capacity(1024);

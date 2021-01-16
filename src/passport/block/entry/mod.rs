@@ -404,7 +404,7 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for EntryType {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let t = u16::arbitrary(g) % 3 + 1;
             Self::try_from_u16(t).expect("value should be correct entry type")
         }
@@ -413,7 +413,7 @@ mod tests {
     const ALIASES: &[&str] = &["", "alias", "01234567890123456789012345678901"];
 
     impl Arbitrary for Entry {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let t = EntryType::arbitrary(g);
             let mut bytes;
 

@@ -328,7 +328,7 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for Header {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let sk = SecretKey::arbitrary(g);
 
             let mut bytes = [0; Self::SIZE];

@@ -203,7 +203,7 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for Content {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let max = usize::arbitrary(g) % 12;
             let mut bytes = Vec::with_capacity(1024);
             let mut content = ContentMut::new(&mut bytes);
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_shared_entry_only() {
-        let mut rng = quickcheck::StdThreadGen::new(1024);
+        let mut rng = quickcheck::Gen::new(1024);
 
         let max = 1;
         let mut bytes = Vec::with_capacity(1024);

@@ -167,7 +167,7 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
 
     impl Arbitrary for DeregisterMasterKey {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let key = PublicKey::arbitrary(g);
 
             let mut bytes = [0; Self::SIZE];
