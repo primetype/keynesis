@@ -50,7 +50,7 @@ a stream Cipher (authenticated or not, ChaCha20 with (or without) Poly1307).
 ```
 # use keynesis::key::ed25519_hd::SecretKey;
 # use rand::thread_rng;
-use cryptoxide::{chacha20::ChaCha20, symmetriccipher::SynchronousStreamCipher as _};
+use cryptoxide::chacha20::ChaCha20;
 
 # let bob_root_key = SecretKey::new(&mut thread_rng());
 # let bob_root_pk = bob_root_key.public_key();
@@ -65,12 +65,11 @@ const NONCE: &[u8] = b"0123456789ab";
 let mut encryption_context = ChaCha20::new(shared_secret_with_bob.as_ref(), &NONCE);
 # let mut decryption_context = ChaCha20::new(shared_secret_with_bob.as_ref(), &NONCE);
 let message: &[u8] = b"Secret Message between alice and bob";
-let mut encrypted = vec![0; message.len()];
-# let mut decrypted = vec![0; message.len()];
+let mut encrypted = message.to_vec();
 
-encryption_context.process(message, &mut encrypted);
-# decryption_context.process(&encrypted, &mut decrypted);
-# assert_eq!(message, decrypted.as_slice());
+encryption_context.process_mut(&mut encrypted);
+# decryption_context.process_mut(&mut encrypted);
+# assert_eq!(message, encrypted);
 ```
 
 */
