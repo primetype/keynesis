@@ -421,7 +421,7 @@ mod tests {
                 EntryType::RegisterMasterKey => {
                     bytes = vec![0; t.size(&[])];
                     let sk = SecretKey::arbitrary(g);
-                    let alias = ALIASES[usize::arbitrary(g) % ALIASES.len()];
+                    let alias = g.choose(ALIASES).unwrap();
                     let _ = EntryMut::new_register_master_key(&mut bytes, alias)
                         .expect("valid alias")
                         .finalize(&sk);
