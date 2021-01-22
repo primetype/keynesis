@@ -25,7 +25,7 @@ use crate::{
 use block::BlockSlice;
 use cryptoxide::blake2b::Blake2b;
 use rand_core::{CryptoRng, RngCore};
-use std::{convert::TryFrom as _, vec};
+use std::{collections::HashSet, convert::TryFrom as _, sync::Arc, vec};
 use thiserror::Error;
 
 /// light representation of the passport
@@ -113,6 +113,10 @@ impl LightPassport {
     pub fn shared_key(&self) -> Option<&(Time, PublicKey)> {
         self.0.shared_key()
     }
+
+    pub fn active_master_keys(&self) -> &HashSet<Arc<PublicKey>> {
+        self.0.active_master_keys()
+    }
 }
 
 impl Passport {
@@ -167,6 +171,10 @@ impl Passport {
     /// recipient may not see the new keys
     pub fn shared_key(&self) -> Option<&(Time, PublicKey)> {
         self.ledger.shared_key()
+    }
+
+    pub fn active_master_keys(&self) -> &HashSet<Arc<PublicKey>> {
+        self.ledger.active_master_keys()
     }
 
     /// access the shared key (associated to the public key given in parameter) with
