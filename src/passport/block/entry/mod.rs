@@ -17,6 +17,7 @@ use crate::{
         curve25519,
         ed25519::{PublicKey, SecretKey},
     },
+    passport::block::Hash,
     Seed,
 };
 use rand_core::{CryptoRng, RngCore};
@@ -140,7 +141,11 @@ impl Entry {
 }
 
 impl<'a> EntryMut<RegisterMasterKeyMut<'a>> {
-    pub fn new_register_master_key(slice: &'a mut [u8], alias: &str) -> Result<Self, EntryError> {
+    pub fn new_register_master_key(
+        slice: &'a mut [u8],
+        alias: &str,
+        passport_id: Hash,
+    ) -> Result<Self, EntryError> {
         assert!(slice.len() == EntryType::RegisterMasterKey.size(&[]));
 
         slice[ENTRY_TYPE_INDEX..ENTRY_TYPE_END]
@@ -148,7 +153,7 @@ impl<'a> EntryMut<RegisterMasterKeyMut<'a>> {
 
         let slice_ptr = slice.as_mut_ptr();
         let slice_size = slice.len();
-        let t = RegisterMasterKeyMut::new(&mut slice[ENTRY_TYPE_END..], alias)?;
+        let t = RegisterMasterKeyMut::new(&mut slice[ENTRY_TYPE_END..], alias, passport_id)?;
 
         Ok(Self {
             slice_ptr,
@@ -421,8 +426,9 @@ mod tests {
                 EntryType::RegisterMasterKey => {
                     bytes = vec![0; t.size(&[])];
                     let sk = SecretKey::arbitrary(g);
+                    let passport_id = Hash::arbitrary(g);
                     let alias = g.choose(ALIASES).unwrap();
-                    let _ = EntryMut::new_register_master_key(&mut bytes, alias)
+                    let _ = EntryMut::new_register_master_key(&mut bytes, alias, passport_id)
                         .expect("valid alias")
                         .finalize(&sk);
                 }

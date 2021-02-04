@@ -1,7 +1,7 @@
 use crate::{
     key::{curve25519, ed25519},
     passport::{
-        block::{self, BlockMut, EntryMut, EntrySlice},
+        block::{self, BlockMut, EntryMut, EntrySlice, Hash},
         Ledger, Passport, PassportError,
     },
     Seed,
@@ -73,7 +73,7 @@ impl PassportBuilder {
         master_key: &ed25519::SecretKey,
     ) -> Result<(), PassportError> {
         let mut entry = vec![0; block::EntryType::RegisterMasterKey.size(&[])];
-        let entry = EntryMut::new_register_master_key(&mut entry, alias)?;
+        let entry = EntryMut::new_register_master_key(&mut entry, alias, Hash::ZERO)?;
         let entry = entry.finalize(master_key);
         self.keys.push(master_key.public_key());
         self.push(entry)

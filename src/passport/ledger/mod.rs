@@ -14,6 +14,8 @@ use thiserror::Error;
 #[derive(Debug, Clone)]
 pub struct Ledger {
     on_block: Hash,
+    on_author: PublicKey,
+    id: Hash,
     at_time: Time,
     active_master_keys: HashSet<Arc<PublicKey>>,
     active_master_keys_by_alias: BTreeMap<String, Arc<PublicKey>>,
@@ -33,6 +35,9 @@ pub enum LedgerError {
 
     #[error("Cannot register a master key after it had timedout")]
     CannotRegisterMasterKeyPassedRegistrationTimeout,
+
+    #[error("Cannot register master key on a different passport")]
+    CannotRegisterMasterKeyWrongPassportId,
 
     #[error("Cannot deregister a master key that is not active")]
     CannotDeregisterMasterKey,
@@ -61,6 +66,8 @@ impl Ledger {
         let header = block.header();
         let mut ledger = Self {
             on_block: header.hash(),
+            on_author: header.author(),
+            id: header.hash(),
             at_time: header.time(),
             active_master_keys: HashSet::new(),
             active_master_keys_by_alias: BTreeMap::new(),
@@ -80,6 +87,11 @@ impl Ledger {
     /// at the given block's hash
     pub fn hash(&self) -> Hash {
         self.on_block
+    }
+
+    /// the unique identifier of the passport (the first block's ID)
+    pub fn id(&self) -> Hash {
+        self.id
     }
 
     /// get the time that was associated to the block
@@ -124,6 +136,7 @@ impl Ledger {
 
         let mut ledger = self.clone();
         ledger.on_block = header.hash();
+        ledger.on_author = header.author();
         ledger.at_time = header.time();
         Ok(ledger)
     }
@@ -159,6 +172,16 @@ impl Ledger {
         }
         if self.at_time > entry.registration_timeout() {
             return Err(LedgerError::CannotRegisterMasterKeyPassedRegistrationTimeout);
+        }
+
+        // if the author of the block is the same as the author of the entry
+        //
+        // * this way we prevent passport being created with master key from other passport
+        //   (they need to sign something with a private key too)
+        // * otherwise passport's ID needs to match the one referenced in the entry
+        //   so no one can just replay the entry in a random passport
+        if self.on_author != entry.key() && self.id != entry.passport() {
+            return Err(LedgerError::CannotRegisterMasterKeyWrongPassportId);
         }
 
         let key = Arc::new(entry.key());

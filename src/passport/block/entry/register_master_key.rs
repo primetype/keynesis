@@ -1,6 +1,6 @@
 use crate::{
     key::ed25519::{PublicKey, SecretKey, Signature},
-    passport::block::Time,
+    passport::block::{Hash, Time},
 };
 use std::{
     borrow::Cow,
@@ -15,7 +15,9 @@ const KEY_INDEX: usize = 0;
 const KEY_END: usize = KEY_INDEX + PublicKey::SIZE;
 const ALIAS_INDEX: usize = KEY_END;
 const ALIAS_END: usize = ALIAS_INDEX + MAX_ALIAS_LEN;
-const CREATED_AT_INDEX: usize = ALIAS_END;
+const PASSPORT_ID_INDEX: usize = ALIAS_END;
+const PASSPORT_ID_END: usize = PASSPORT_ID_INDEX + Hash::SIZE;
+const CREATED_AT_INDEX: usize = PASSPORT_ID_END;
 const CREATED_AT_END: usize = CREATED_AT_INDEX + Time::SIZE;
 const REGISTRATION_TIMEOUT_INDEX: usize = CREATED_AT_END;
 const REGISTRATION_TIMEOUT_END: usize = REGISTRATION_TIMEOUT_INDEX + Time::SIZE;
@@ -73,6 +75,11 @@ impl RegisterMasterKey {
     }
 
     #[inline(always)]
+    pub fn passport(&self) -> Hash {
+        self.as_slice().passport()
+    }
+
+    #[inline(always)]
     pub fn registration_timeout(&self) -> Time {
         self.as_slice().registration_timeout()
     }
@@ -84,7 +91,11 @@ impl RegisterMasterKey {
 }
 
 impl<'a> RegisterMasterKeyMut<'a> {
-    pub fn new(slice: &'a mut [u8], alias: &str) -> Result<Self, RegisterMasterKeyError> {
+    pub fn new(
+        slice: &'a mut [u8],
+        alias: &str,
+        passport_id: Hash,
+    ) -> Result<Self, RegisterMasterKeyError> {
         let mut s = Self(slice);
 
         if !check_alias(alias) {
@@ -97,6 +108,7 @@ impl<'a> RegisterMasterKeyMut<'a> {
         let registration_timeout = created_at
             .wrapping_add(RegisterMasterKey::REGISTRATION_TIMEOUT)
             .into();
+        s.passport(passport_id);
         s.registration_timeout(registration_timeout);
 
         Ok(s)
@@ -104,6 +116,10 @@ impl<'a> RegisterMasterKeyMut<'a> {
 
     fn alias(&mut self, alias: &str) {
         self.0[ALIAS_INDEX..(ALIAS_INDEX + alias.len())].copy_from_slice(alias.as_bytes());
+    }
+
+    fn passport(&mut self, passport_id: Hash) {
+        self.0[PASSPORT_ID_INDEX..PASSPORT_ID_END].copy_from_slice(passport_id.as_ref())
     }
 
     fn created_at(&mut self, time: Time) {
@@ -198,6 +214,12 @@ impl<'a> RegisterMasterKeySlice<'a> {
         self.0[KEY_INDEX..KEY_END].try_into().expect("key")
     }
 
+    pub fn passport(&self) -> Hash {
+        self.0[PASSPORT_ID_INDEX..PASSPORT_ID_END]
+            .try_into()
+            .expect("Passport ID")
+    }
+
     pub fn alias(&self) -> Cow<'a, str> {
         let slice = &self.0[ALIAS_INDEX..ALIAS_END];
         let mut split = slice.split(|x| x == &0x00);
@@ -264,6 +286,7 @@ impl<'a> fmt::Debug for RegisterMasterKeySlice<'a> {
             .field("key", &self.key())
             .field("alias", &self.alias())
             .field("created_at", &self.created_at())
+            .field("passport", &self.passport())
             .field("registration_timeout", &self.registration_timeout())
             .field("signature", &self.signature())
             .finish()
@@ -276,6 +299,7 @@ impl fmt::Debug for RegisterMasterKey {
             .field("key", &self.key())
             .field("alias", &self.alias())
             .field("created_at", &self.created_at())
+            .field("passport", &self.passport())
             .field("registration_timeout", &self.registration_timeout())
             .field("signature", &self.signature())
             .finish()
@@ -293,9 +317,11 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> Self {
             let sk = SecretKey::arbitrary(g);
             let alias = ALIASES[usize::arbitrary(g) % ALIASES.len()];
+            let passport_id = Hash::arbitrary(g);
 
             let mut bytes = [0; Self::SIZE];
-            let builder = RegisterMasterKeyMut::new(&mut bytes, alias).expect("valid entry");
+            let builder =
+                RegisterMasterKeyMut::new(&mut bytes, alias, passport_id).expect("valid entry");
 
             let _ = builder.finalize(&sk);
 
@@ -307,7 +333,7 @@ mod tests {
     fn register_master_key_size() {
         assert_eq!(
             RegisterMasterKey::SIZE,
-            136,
+            152,
             "expecting a constant size for the RegisterMasterKey and that it should be documented"
         );
     }
