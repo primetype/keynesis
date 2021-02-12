@@ -181,6 +181,14 @@ impl Passport {
         self.ledger.active_master_keys()
     }
 
+    /// update the passport with a brand new block
+    ///
+    pub fn push(&mut self, block: Block) -> Result<(), PassportError> {
+        self.ledger.apply(block.as_slice())?;
+        self.blockchain.push(block);
+        Ok(())
+    }
+
     /// access the shared key (associated to the public key given in parameter) with
     /// the master key and passphrase.
     ///
