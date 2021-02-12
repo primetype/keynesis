@@ -19,7 +19,7 @@ exclude = [
 nightly = []
 
 [dependencies]
-cryptoxide = "0.3.0"
+cryptoxide = "0.3.2"
 thiserror = "1.0.23"
 hex = "0.4.2"
 rand_core = "0.6.1"
