@@ -22,7 +22,7 @@ use crate::{
     noise::{HandshakeStateError, N},
     Seed,
 };
-use block::BlockSlice;
+use block::{BlockSlice, Hash};
 use cryptoxide::blake2b::Blake2b;
 use rand_core::{CryptoRng, RngCore};
 use std::{collections::HashSet, convert::TryFrom as _, sync::Arc, vec};
@@ -102,6 +102,10 @@ impl LightPassport {
     pub fn update(&mut self, block: BlockSlice) -> Result<(), PassportError> {
         self.0 = self.0.apply(block)?;
         Ok(())
+    }
+
+    pub fn id(&self) -> Hash {
+        self.0.id()
     }
 
     /// get the `Passport` shared key
