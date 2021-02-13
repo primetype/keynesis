@@ -152,7 +152,8 @@ impl Passport {
         builder.finalize(author)
     }
 
-    pub(crate) fn new(block: Block) -> Result<Self, PassportError> {
+    /// create a passport from the given block
+    pub fn new(block: Block) -> Result<Self, PassportError> {
         let ledger = Ledger::new(block.as_slice())?;
         let blockchain = vec![block];
 
