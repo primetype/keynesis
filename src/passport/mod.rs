@@ -190,6 +190,10 @@ impl Passport {
         Ok(())
     }
 
+    pub fn id(&self) -> Hash {
+        self.ledger.id()
+    }
+
     /// access the shared key (associated to the public key given in parameter) with
     /// the master key and passphrase.
     ///
