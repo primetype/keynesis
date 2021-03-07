@@ -45,18 +45,18 @@ impl PassportBuilder {
     ///
     pub fn rotate_shared_key<RNG>(
         &mut self,
-        rng: &mut RNG,
+        mut rng: RNG,
         passphrase: Seed,
     ) -> Result<(), PassportError>
     where
         RNG: CryptoRng + RngCore,
     {
-        let new_key = curve25519::SecretKey::new(rng);
+        let new_key = curve25519::SecretKey::new(&mut rng);
         let mut entry = Vec::with_capacity(256);
         let mut entry = EntryMut::new_set_shared_key(&mut entry, &new_key.public_key());
         let passphrase = Some(passphrase);
         for key in self.keys.iter() {
-            entry.share_with(rng, &new_key, key, &passphrase)?;
+            entry.share_with(&mut rng, &new_key, key, &passphrase)?;
         }
         let entry = entry.finalize()?;
         self.push(entry)
@@ -141,18 +141,18 @@ impl<'a> PassportMut<'a> {
     ///
     pub fn rotate_shared_key<RNG>(
         &mut self,
-        rng: &mut RNG,
+        mut rng: RNG,
         passphrase: Seed,
     ) -> Result<(), PassportError>
     where
         RNG: CryptoRng + RngCore,
     {
-        let new_key = curve25519::SecretKey::new(rng);
+        let new_key = curve25519::SecretKey::new(&mut rng);
         let mut entry = Vec::with_capacity(256);
         let mut entry = EntryMut::new_set_shared_key(&mut entry, &new_key.public_key());
         let passphrase = Some(passphrase);
         for key in self.ledger.active_master_keys() {
-            entry.share_with(rng, &new_key, key, &passphrase)?;
+            entry.share_with(&mut rng, &new_key, key, &passphrase)?;
         }
         let entry = entry.finalize()?;
         self.push(entry)

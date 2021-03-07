@@ -45,7 +45,7 @@ impl ChainCode {
 
     /// generate a new `SecretKey` with the given random number generator
     ///
-    fn new<Rng>(rng: &mut Rng) -> Self
+    fn new<Rng>(mut rng: Rng) -> Self
     where
         Rng: RngCore + CryptoRng,
     {
@@ -60,11 +60,11 @@ impl SecretKey {
 
     /// generate a new `SecretKey` with the given random number generator
     ///
-    pub fn new<Rng>(rng: &mut Rng) -> Self
+    pub fn new<Rng>(mut rng: Rng) -> Self
     where
         Rng: RngCore + CryptoRng,
     {
-        let mut key = ed25519_extended::SecretKey::new(rng);
+        let mut key = ed25519_extended::SecretKey::new(&mut rng);
         let chain_code = ChainCode::new(rng);
 
         key.clear_3rd_highest_bit();

@@ -94,7 +94,7 @@ impl<'a> SetSharedKeyMut<'a> {
 
     pub fn share_with<RNG>(
         &mut self,
-        rng: &mut RNG,
+        rng: RNG,
         key: &curve25519::SecretKey,
         to: &PublicKey,
         passphrase: &Option<Seed>,

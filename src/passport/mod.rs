@@ -136,7 +136,7 @@ impl Passport {
     /// `passphrase`.
     ///
     pub fn create<RNG>(
-        rng: &mut RNG,
+        rng: RNG,
         alias: &str,
         author: &ed25519::SecretKey,
         passphrase: Seed,

@@ -31,7 +31,7 @@ impl SecretKey {
 
     /// generate a new `SecretKey` with the given random number generator
     ///
-    pub fn new<Rng>(rng: &mut Rng) -> Self
+    pub fn new<Rng>(mut rng: Rng) -> Self
     where
         Rng: RngCore + CryptoRng,
     {
