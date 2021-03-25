@@ -11,6 +11,7 @@ use rand_core::{CryptoRng, RngCore};
 /// Interactive Handshake [**Noise XX**]
 ///
 /// [**Noise XX**]: https://noiseexplorer.com/patterns/XX/
+#[allow(clippy::upper_case_acronyms)]
 pub struct XX<DH, H, RNG, S>
 where
     H: Hash,

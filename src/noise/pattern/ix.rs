@@ -10,6 +10,7 @@ use std::io::Write;
 /// Interactive Handshake [**Noise IX**]
 ///
 /// [**Noise IX**]: https://noiseexplorer.com/patterns/IX/
+#[allow(clippy::upper_case_acronyms)]
 pub struct IX<DH, H, RNG, S>
 where
     H: Hash,

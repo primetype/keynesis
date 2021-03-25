@@ -10,6 +10,7 @@ use std::io::Write;
 /// Interactive Handshake [**Noise IK**]
 ///
 /// [**Noise IK**]: https://noiseexplorer.com/patterns/IK/
+#[allow(clippy::upper_case_acronyms)]
 pub struct IK<DH, H, RNG, S>
 where
     H: Hash,
