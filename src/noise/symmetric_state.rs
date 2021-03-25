@@ -336,7 +336,7 @@ mod tests {
         decrypt_theirs.decrypt_and_hash(&mut their_output).unwrap();
         assert_eq!(decrypt_theirs.h.as_bytes(), theirs.h.as_bytes(),);
         assert_eq!(decrypt_theirs.ck.as_bytes(), theirs.ck.as_bytes(),);
-        assert_eq!(&their_output[..PLAINTEXT.len()], &PLAINTEXT[..]);
+        assert_eq!(&their_output[..PLAINTEXT.len()], PLAINTEXT);
 
         let mut plaintext = [0; 10];
         decrypt_ours
@@ -344,6 +344,6 @@ mod tests {
             .unwrap();
         assert_eq!(decrypt_ours.h, decrypt_theirs.h.as_bytes(),);
         assert_eq!(decrypt_ours.ck, decrypt_theirs.ck.as_bytes(),);
-        assert_eq!(&plaintext[..PLAINTEXT.len()], &PLAINTEXT[..]);
+        assert_eq!(&plaintext[..PLAINTEXT.len()], PLAINTEXT);
     }
 }

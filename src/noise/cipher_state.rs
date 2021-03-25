@@ -216,7 +216,7 @@ mod tests {
         );
         assert_eq!(
             &our_output[..PLAINTEXT.len()],
-            &PLAINTEXT[..],
+            PLAINTEXT,
             "no key, so input should be the same as output"
         )
     }
