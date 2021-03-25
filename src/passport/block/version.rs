@@ -1,5 +1,4 @@
 use std::{
-    convert::Into,
     fmt::{self, Formatter},
     ops::Deref,
     str::FromStr,
@@ -88,9 +87,9 @@ impl From<u16> for Version {
     }
 }
 
-impl Into<u16> for Version {
-    fn into(self) -> u16 {
-        self.0
+impl From<Version> for u16 {
+    fn from(v: Version) -> Self {
+        v.0
     }
 }
 

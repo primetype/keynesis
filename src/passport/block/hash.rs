@@ -87,9 +87,9 @@ impl From<[u8; Self::SIZE]> for Hash {
     }
 }
 
-impl Into<[u8; Self::SIZE]> for Hash {
-    fn into(self) -> [u8; Self::SIZE] {
-        self.0
+impl From<Hash> for [u8; Hash::SIZE] {
+    fn from(hash: Hash) -> Self {
+        hash.0
     }
 }
 

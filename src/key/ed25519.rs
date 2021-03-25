@@ -208,9 +208,9 @@ impl From<[u8; Self::SIZE]> for PublicKey {
     }
 }
 
-impl Into<[u8; Self::SIZE]> for PublicKey {
-    fn into(self) -> [u8; Self::SIZE] {
-        self.0
+impl From<PublicKey> for [u8; PublicKey::SIZE] {
+    fn from(pk: PublicKey) -> Self {
+        pk.0
     }
 }
 
