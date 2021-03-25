@@ -6,13 +6,14 @@ associated keys only. Making it a permission blockchain.
 */
 
 pub mod block;
+mod blocks;
 mod builder;
 pub mod ledger;
 
-pub use self::builder::PassportMut;
-use self::{
-    block::{Block, Time},
-    ledger::Ledger,
+use self::{block::Time, ledger::Ledger};
+pub use self::{
+    blocks::{BlockIter, BlocksError, PassportBlocks, PassportBlocksSlice},
+    builder::PassportMut,
 };
 use crate::{
     key::{
@@ -25,7 +26,7 @@ use crate::{
 use block::{BlockSlice, Hash};
 use cryptoxide::blake2b::Blake2b;
 use rand_core::{CryptoRng, RngCore};
-use std::{collections::HashSet, convert::TryFrom as _, sync::Arc, vec};
+use std::{collections::HashSet, convert::TryFrom as _, sync::Arc};
 use thiserror::Error;
 
 /// light representation of the passport
@@ -46,7 +47,7 @@ pub struct LightPassport(Ledger);
 pub struct Passport {
     ledger: Ledger,
 
-    blockchain: Vec<Block>,
+    blockchain: PassportBlocks<Vec<u8>>,
 }
 
 #[derive(Debug, Error)]
@@ -153,9 +154,11 @@ impl Passport {
     }
 
     /// create a passport from the given block
-    pub fn new(block: Block) -> Result<Self, PassportError> {
-        let ledger = Ledger::new(block.as_slice())?;
-        let blockchain = vec![block];
+    pub fn new(block: BlockSlice<'_>) -> Result<Self, PassportError> {
+        let ledger = Ledger::new(block)?;
+
+        let mut blockchain = PassportBlocks::new();
+        blockchain.push(block);
 
         Ok(Self { blockchain, ledger })
     }
@@ -184,8 +187,8 @@ impl Passport {
 
     /// update the passport with a brand new block
     ///
-    pub fn push(&mut self, block: Block) -> Result<(), PassportError> {
-        self.ledger.apply(block.as_slice())?;
+    pub fn push(&mut self, block: BlockSlice<'_>) -> Result<(), PassportError> {
+        self.ledger.apply(block)?;
         self.blockchain.push(block);
         Ok(())
     }
@@ -208,13 +211,7 @@ impl Passport {
         passphrase: Seed,
     ) -> Result<curve25519::SecretKey, PassportError> {
         let passphrase = Some(passphrase);
-        for entry in self
-            .blockchain
-            .iter()
-            .rev()
-            .map(|b| b.content().iter())
-            .flatten()
-        {
+        for entry in self.blockchain.iter().map(|b| b.content().iter()).flatten() {
             let pub_key = master_key.public_key();
             if let Some(entry) = entry.set_shared_key() {
                 if &entry.key() == shared_key {
@@ -241,7 +238,7 @@ impl Passport {
         Err(PassportError::NoSharedKeyFound)
     }
 
-    pub fn blocks(&self) -> &[Block] {
+    pub fn blocks(&self) -> PassportBlocksSlice<'_> {
         self.blockchain.as_slice()
     }
 }

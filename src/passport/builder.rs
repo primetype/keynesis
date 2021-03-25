@@ -88,7 +88,7 @@ impl PassportBuilder {
 
         let block = block.finalize(author);
 
-        Passport::new(block)
+        Passport::new(block.as_slice())
     }
 }
 
@@ -174,7 +174,7 @@ impl<'a> PassportMut<'a> {
         let ledger = passport.ledger.apply(block.as_slice())?;
 
         passport.ledger = ledger;
-        passport.blockchain.push(block);
+        passport.blockchain.push(block.as_slice());
 
         Ok(passport)
     }
