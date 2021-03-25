@@ -278,7 +278,7 @@ mod tests {
         let passphrase = Seed::generate(&mut rng);
         let alias = "device1";
 
-        let mut passport = Passport::create(&mut rng, alias, &author, passphrase.clone())
+        let mut passport = Passport::create(&mut rng, alias, &author, passphrase)
             .expect("Create a valid passport");
 
         passport
