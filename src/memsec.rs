@@ -125,21 +125,14 @@ macro_rules! impl_scrubbed_array {
     };
 }
 
-impl_scrubbed_array!([u8; 2]);
-impl_scrubbed_array!([u8; 4]);
-impl_scrubbed_array!([u8; 8]);
-impl_scrubbed_array!([u8; 16]);
-impl_scrubbed_array!([u8; 24]);
-impl_scrubbed_array!([u8; 32]);
-impl_scrubbed_array!([u8; 40]);
-impl_scrubbed_array!([u8; 48]);
-impl_scrubbed_array!([u8; 56]);
-impl_scrubbed_array!([u8; 64]);
-impl_scrubbed_array!([u8; 128]);
-impl_scrubbed_array!([u8; 256]);
-impl_scrubbed_array!([u8; 512]);
 impl_scrubbed_array!([u8]);
 impl_scrubbed_array!(str);
+
+impl<const N: usize> Scrubbed for [u8; N] {
+    fn scrub(&mut self) {
+        unsafe { memset(self.as_mut_ptr(), 0, self.len()) }
+    }
+}
 
 impl<T: Scrubbed> Scrubbed for Option<T> {
     fn scrub(&mut self) {
