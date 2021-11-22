@@ -66,7 +66,7 @@ impl Key {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_$NOISE2RS_N$::{
+    /// # use noiseexplorer_ik::{
     /// #   error::NoiseError,
     /// #   types::Key,
     /// # };
@@ -101,7 +101,7 @@ impl std::str::FromStr for Key {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_$NOISE2RS_N$::{
+    /// # use noiseexplorer_ik::{
     /// #   error::NoiseError,
     /// #   types::Key,
     /// # };
@@ -144,7 +144,7 @@ impl Psk {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_$NOISE2RS_N$::{
+    /// # use noiseexplorer_ik::{
     /// #   error::NoiseError,
     /// #   types::Psk,
     /// # };
@@ -180,7 +180,7 @@ impl std::str::FromStr for Psk {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_$NOISE2RS_N$::{
+    /// # use noiseexplorer_ik::{
     /// #   error::NoiseError,
     /// #   types::Psk,
     /// # };
@@ -225,7 +225,7 @@ impl PrivateKey {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_$NOISE2RS_N$::{
+    /// # use noiseexplorer_ik::{
     /// #   error::NoiseError,
     /// #   types::PrivateKey,
     /// # };
@@ -263,7 +263,7 @@ impl std::str::FromStr for PrivateKey {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_$NOISE2RS_N$::{
+    /// # use noiseexplorer_ik::{
     /// #   error::NoiseError,
     /// #   types::PrivateKey,
     /// # };
@@ -314,7 +314,7 @@ impl PublicKey {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_$NOISE2RS_N$::{
+    /// # use noiseexplorer_ik::{
     /// #   error::NoiseError,
     /// #   types::PublicKey,
     /// # };
@@ -341,7 +341,7 @@ impl std::str::FromStr for PublicKey {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_$NOISE2RS_N$::{
+    /// # use noiseexplorer_ik::{
     /// #   error::NoiseError,
     /// #   types::PublicKey,
     /// # };

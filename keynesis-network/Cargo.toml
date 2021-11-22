@@ -1,0 +1,28 @@
+[package]
+name = "keynesis-network"
+version = "0.1.0"
+authors = ["Nicolas Di Prima <nicolas@primetype.co.uk>"]
+edition = "2021"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/primetype/keynesis-network"
+documentation = "https://docs.rs/keynesis-network"
+homepage = "https://github.com/primetype/keynesis-network"
+categories = ["network"]
+keywords = ["cryptography"]
+description = "network library leveraging keynesis"
+exclude = [
+    ".gitignore",
+]
+
+[dependencies]
+keynesis = { version = "2.0", path = "../keynesis-core" }
+anyhow = { version = "1.0" }
+tokio = { version = "1.14", features = [ "io-util", "net" ] }
+tokio-util = { version = "0.6", features = [ "codec" ] }
+bytes = { version = "1.1" }
+hex = { version = "0.4" }
+rand_core = { version = "0.6" }
+futures = { version = "0.3" }
+tracing = { version = "0.1" }
+tracing-futures = { version = "0.2" }

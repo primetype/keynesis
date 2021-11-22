@@ -1,0 +1,58 @@
+name: Continuous Health Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+
+    steps:
+      - name: "checkout"
+        uses: actions/checkout@v2
+
+      - name: "setup"
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          override: true
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: "rustfmt"
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          # don't use --workspace, rustfmt does not have this flag parameter
+          # so keep the --all
+          args: --all -- --check
+
+      - name: "clippy"
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --locked --workspace --all-features -- --deny "clippy::all"
+
+      - name: "Build"
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --locked --workspace --all-features
+
+      - name: "unit tests"
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --locked --workspace --exclude "s1-program" --all-features

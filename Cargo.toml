@@ -1,37 +1,5 @@
-[package]
-name = "keynesis"
-version = "2.0.0"
-authors = ["Nicolas Di Prima <nicolas@primetype.co.uk>"]
-edition = "2018"
-readme = "README.md"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/primetype/keynesis"
-documentation = "https://docs.rs/keynesis"
-homepage = "https://github.com/primetype/keynesis"
-categories = ["cryptography"]
-keywords = ["crypto", "cryptoxide", "ed25519", "curve25519", "noise"]
-description = "General purpose key management and associated cryptographic protocols"
-exclude = [
-    ".gitignore",
+[workspace]
+members = [
+    "keynesis-core",
+    "keynesis-network",
 ]
-
-[features]
-nightly = []
-
-[dependencies]
-packtool = { version = "0.3.0" }
-cryptoxide = "0.3.2"
-thiserror = "1.0.23"
-hex = "0.4.2"
-rand_core = "0.6.1"
-rand_chacha = "0.3.0"
-
-[dev-dependencies]
-rand = "0.8.3"
-quickcheck = "1.0.3"
-quickcheck_macros = "1.0.0"
-chrono = "0.4.19"
-
-hacl-star = "0.1.0"
-snow = { version = "0.8.0" }
-noiseexplorer_ik = { path = "ref/IK.noise.rs" }
