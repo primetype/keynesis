@@ -8,6 +8,7 @@ use cryptoxide::{
     mac::Mac,
     sha2::Sha512,
 };
+use packtool::Packed;
 use rand_core::{CryptoRng, RngCore};
 use std::{
     convert::TryFrom,
@@ -17,8 +18,11 @@ use std::{
 };
 use thiserror::Error;
 
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub struct ChainCode([u8; Self::SIZE]);
+#[derive(Packed, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct ChainCode(
+    // hide the inner structure of the chaincode
+    #[packed(accessor = false)] [u8; Self::SIZE],
+);
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct SecretKey {
@@ -26,9 +30,12 @@ pub struct SecretKey {
     chain_code: ChainCode,
 }
 
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(Packed, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PublicKey {
+    #[packed(accessor = "public_key")]
     key: ed25519_extended::PublicKey,
+    // hide the chain code from the HD public key view
+    #[packed(accessor = false)]
     chain_code: ChainCode,
 }
 
@@ -141,15 +148,15 @@ impl SecretKey {
         let kr = &e_key[32..64];
         let chaincode = self.chain_code.as_ref();
 
-        let mut z_mac = Hmac::new(Sha512::new(), &chaincode);
-        let mut i_mac = Hmac::new(Sha512::new(), &chaincode);
+        let mut z_mac = Hmac::new(Sha512::new(), chaincode);
+        let mut i_mac = Hmac::new(Sha512::new(), chaincode);
         let pk = self.public_key();
         let pk = pk.key().as_ref();
         z_mac.input(&[0x2]);
-        z_mac.input(&pk);
+        z_mac.input(pk);
         z_mac.input(path.as_ref());
         i_mac.input(&[0x3]);
-        i_mac.input(&pk);
+        i_mac.input(pk);
         i_mac.input(path.as_ref());
 
         let mut z_out = [0u8; 64];
@@ -208,13 +215,13 @@ impl PublicKey {
         let pk = self.key().as_ref();
         let chaincode = self.chain_code().as_ref();
 
-        let mut z_mac = Hmac::new(Sha512::new(), &chaincode);
-        let mut i_mac = Hmac::new(Sha512::new(), &chaincode);
+        let mut z_mac = Hmac::new(Sha512::new(), chaincode);
+        let mut i_mac = Hmac::new(Sha512::new(), chaincode);
         z_mac.input(&[0x2]);
-        z_mac.input(&pk);
+        z_mac.input(pk);
         z_mac.input(path.as_ref());
         i_mac.input(&[0x3]);
-        i_mac.input(&pk);
+        i_mac.input(pk);
         i_mac.input(path.as_ref());
 
         let mut z_out = [0u8; 64];

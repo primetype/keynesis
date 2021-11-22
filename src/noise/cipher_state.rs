@@ -1,4 +1,4 @@
-use cryptoxide::chacha20poly1305::ChaCha20Poly1305;
+use cryptoxide::chacha20poly1305::{ChaCha20Poly1305, Context};
 use std::fmt;
 use thiserror::Error;
 
@@ -40,6 +40,7 @@ impl Nonce {
         self.0
     }
 
+    #[inline(always)]
     fn to_bytes(self) -> [u8; 12] {
         let mut nonce_bytes = [0u8; 12];
         nonce_bytes[4..].copy_from_slice(&self.0.to_le_bytes());
@@ -102,10 +103,13 @@ impl CipherState {
                 return Err(CipherStateError::NotEnoughOutput);
             }
 
-            let mut ctx = ChaCha20Poly1305::new(&self.k, &self.n.to_bytes(), ad.as_ref());
+            let mut ctx = Context::new(&self.k, &self.n.to_bytes());
+            ctx.add_data(ad.as_ref());
+            let mut ctx = ctx.to_encryption();
 
             let (output, tag) = output.split_at_mut(tag_index);
-            ctx.encrypt(plaintext.as_ref(), output, &mut tag[..Self::TAG_LEN]);
+            ctx.encrypt(plaintext.as_ref(), output);
+            tag[..Self::TAG_LEN].copy_from_slice(&ctx.finalize().0);
             self.n = self.n.increment().ok_or(CipherStateError::Nonce)?;
             tag_index + Self::TAG_LEN
         } else {

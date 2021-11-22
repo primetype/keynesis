@@ -1,6 +1,6 @@
 [package]
 name = "keynesis"
-version = "1.4.0"
+version = "2.0.0"
 authors = ["Nicolas Di Prima <nicolas@primetype.co.uk>"]
 edition = "2018"
 readme = "README.md"
@@ -9,7 +9,7 @@ repository = "https://github.com/primetype/keynesis"
 documentation = "https://docs.rs/keynesis"
 homepage = "https://github.com/primetype/keynesis"
 categories = ["cryptography"]
-keywords = ["cryptography", "crypto", "cryptoxide", "ed25519", "curve25519"]
+keywords = ["cryptography", "crypto", "cryptoxide", "ed25519", "curve25519", "noise"]
 description = "General purpose key management and associated cryptographic protocols"
 exclude = [
     ".gitignore",
@@ -19,6 +19,7 @@ exclude = [
 nightly = []
 
 [dependencies]
+packtool = { version = "0.3.0" }
 cryptoxide = "0.3.2"
 thiserror = "1.0.23"
 hex = "0.4.2"

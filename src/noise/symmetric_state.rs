@@ -47,7 +47,7 @@ where
             h.as_mut()[..protocol_name.len()].copy_from_slice(protocol_name);
         }
 
-        ck.as_mut().copy_from_slice(&h.as_ref());
+        ck.as_mut().copy_from_slice(h.as_ref());
 
         Self {
             h,
@@ -159,7 +159,6 @@ where
     }
 }
 
-#[allow(clippy::clippy::needless_range_loop)]
 fn hmac<H: Hash>(hasher: &mut H, key: &[u8], data: &[u8], extra: Option<&[u8]>, out: &mut H::HASH) {
     let mut inner = H::zero_hash();
     let mut inner_pad = H::zero_block();
@@ -174,9 +173,9 @@ fn hmac<H: Hash>(hasher: &mut H, key: &[u8], data: &[u8], extra: Option<&[u8]>, 
         std::ptr::write_bytes(out_pad.as_mut().as_mut_ptr(), 0x5c, out_pad.as_ref().len());
     }
 
-    for count in 0..key.len() {
-        inner_pad.as_mut()[count] ^= key[count];
-        out_pad.as_mut()[count] ^= key[count];
+    for (i, e) in key.iter().copied().enumerate() {
+        inner_pad.as_mut()[i] ^= e;
+        out_pad.as_mut()[i] ^= e;
     }
 
     hasher.reset();

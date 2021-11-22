@@ -62,7 +62,7 @@ where
     ) -> Result<(), HandshakeStateError> {
         let Self { mut inner } = self;
 
-        inner.mix_hash(&rs);
+        inner.mix_hash(rs);
 
         inner.write_e(&mut output)?;
         inner.dh_ex(rs);

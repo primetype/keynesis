@@ -36,6 +36,6 @@ impl<'a> From<&'a [u8]> for BufRead<'a> {
 
 impl AsRef<[u8]> for BufRead<'_> {
     fn as_ref(&self) -> &[u8] {
-        &self.bytes
+        self.bytes
     }
 }
