@@ -16,7 +16,7 @@ It is then possible to define a root master key and to derive specific
 purpose keys from this root key.
 
 ```
-use keynesis::key::ed25519_hd::SecretKey;
+use keynesis_core::key::ed25519_hd::SecretKey;
 # use rand::thread_rng;
 
 # let bob_root_key = SecretKey::new(&mut thread_rng());
@@ -48,7 +48,7 @@ Once a shared secret has been established it is possible to use it to seed
 a stream Cipher (authenticated or not, ChaCha20 with (or without) Poly1307).
 
 ```
-# use keynesis::key::ed25519_hd::SecretKey;
+# use keynesis_core::key::ed25519_hd::SecretKey;
 # use rand::thread_rng;
 use cryptoxide::chacha20::ChaCha20;
 

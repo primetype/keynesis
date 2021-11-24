@@ -3,7 +3,7 @@ use crate::{
     Handle,
 };
 use anyhow::{bail, Context as _, Result};
-use keynesis::{
+use keynesis_core::{
     hash::Blake2b,
     key::{
         ed25519::{self, PublicKey},

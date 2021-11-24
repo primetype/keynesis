@@ -3,7 +3,7 @@
 
 extern crate test;
 use cryptoxide::blake2s::Blake2s;
-use keynesis::{
+use keynesis_core::{
     key::{curve25519::SecretKey, Dh as _},
     noise::IK,
     Seed,

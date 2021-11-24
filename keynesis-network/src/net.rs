@@ -14,7 +14,7 @@ use crate::{
 use anyhow::{bail, Context as _, Result};
 use bytes::Bytes;
 use futures::prelude::*;
-use keynesis::key::{
+use keynesis_core::key::{
     ed25519::{self, PublicKey},
     Dh,
 };

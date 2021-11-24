@@ -1,5 +1,5 @@
 use crate::Version;
-use keynesis::key::ed25519;
+use keynesis_core::key::ed25519;
 
 /// initial handshake message
 ///

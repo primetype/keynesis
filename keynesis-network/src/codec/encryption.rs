@@ -1,6 +1,6 @@
 use crate::SessionId;
 use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
-use keynesis::{
+use keynesis_core::{
     hash::Blake2b,
     key::ed25519::PublicKey,
     noise::{TransportReceiveHalf, TransportSendHalf},

@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{Context as _, Result};
 use bytes::{Bytes, BytesMut};
 use futures::{prelude::*, stream::FusedStream as _};
-use keynesis::{
+use keynesis_core::{
     hash::Blake2b,
     key::{ed25519::PublicKey, Dh},
     noise::{TransportReceiveHalf, TransportSendHalf, TransportState},
