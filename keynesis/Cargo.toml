@@ -1,5 +1,5 @@
 [package]
-name = "keynesis-core"
+name = "keynesis"
 version = "2.0.0"
 authors = ["Nicolas Di Prima <nicolas@primetype.co.uk>"]
 edition = "2021"
@@ -15,23 +15,7 @@ exclude = [
     ".gitignore",
 ]
 
-[features]
-nightly = []
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-packtool = { version = "0.3.0" }
-cryptoxide = "0.3.2"
-thiserror = "1.0.23"
-hex = "0.4.2"
-rand_core = "0.6.1"
-rand_chacha = "0.3.0"
-
-[dev-dependencies]
-rand = "0.8.3"
-quickcheck = "1.0.3"
-quickcheck_macros = "1.0.0"
-chrono = "0.4.19"
-
-hacl-star = "0.1.0"
-snow = { version = "0.8.0" }
-noiseexplorer_ik = { path = "ref/IK.noise.rs" }
+keynesis-core = { version = "2.0", path = "../keynesis-core" }
