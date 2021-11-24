@@ -1,4 +1,4 @@
-# ASMTP-NETWORK
+# KEYNESIS-NETWORK
 
 This crate implements the network part of the Anonymous Secure Mail Transfer
 Protocol (**ASMTP**). See siblings libraries for the other part of the protocol
@@ -39,8 +39,8 @@ and while there is room for up to 255 it is likely not to grow much.
 
 This project is licensed under the [MIT] **OR** [Apache-2.0] dual license.
 
-[MIT]: https://github.com/primetype/keynesis-network/blob/master/LICENSE-MIT
-[Apache-2.0]: https://github.com/primetype/keynesis-network/blob/master/LICENSE-APACHE
+[MIT]: https://github.com/primetype/keynesis/blob/master/keynesis-network/LICENSE-MIT
+[Apache-2.0]: https://github.com/primetype/keynesis/blob/master/keynesis-network/LICENSE-APACHE
 
 ### Contribution
 
