@@ -1,6 +1,6 @@
 [package]
 name = "keynesis"
-version = "2.0.0"
+version = "2.0.1"
 authors = ["Nicolas Di Prima <nicolas@primetype.co.uk>"]
 edition = "2021"
 readme = "README.md"
@@ -18,4 +18,4 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-keynesis-core = { version = "2.0", path = "../keynesis-core" }
+keynesis-core = { version = "1.0", path = "../keynesis-core" }
