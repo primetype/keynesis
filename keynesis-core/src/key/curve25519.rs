@@ -86,7 +86,7 @@ impl SecretKey {
     ///
     /// be mindful that leaking the content of the internal signing key
     /// may result in losing the ultimate control of the signing key
-    pub(crate) fn leak_as_ref(&self) -> &[u8; Self::SIZE] {
+    pub fn leak_as_ref(&self) -> &[u8; Self::SIZE] {
         &self.secret
     }
 }
