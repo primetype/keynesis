@@ -211,6 +211,8 @@ mod tests {
             s.secret[31] &= 0b0011_1111;
             s.secret[31] |= 0b0100_0000;
 
+            s.public = cryptoxide::curve25519::curve25519_base(&s.secret);
+
             s
         }
     }
