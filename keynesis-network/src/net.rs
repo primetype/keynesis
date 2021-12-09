@@ -342,7 +342,7 @@ impl Connection {
 }
 
 impl Stream for Connection {
-    type Item = (PublicKey, Result<Bytes>);
+    type Item = Result<Bytes>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let connection = self.get_mut();
         Pin::new(&mut connection.reader).poll_next(cx)
@@ -350,24 +350,19 @@ impl Stream for Connection {
 }
 
 impl Stream for ConnectionReader {
-    type Item = (PublicKey, Result<Bytes>);
+    type Item = Result<Bytes>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let connection = self.get_mut();
         match Pin::new(&mut connection.reader).poll_next(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => Poll::Ready(None),
-            Poll::Ready(Some(Err(error))) => {
-                let id = *connection.remote_public_identity();
-                Poll::Ready(Some((
-                    id,
-                    Err(error).context("Cannot receive message from connection"),
-                )))
-            }
+            Poll::Ready(Some(Err(error))) => Poll::Ready(Some(
+                Err(error).context("Cannot receive message from connection"),
+            )),
             Poll::Ready(Some(Ok(bytes))) => {
-                let id = *connection.remote_public_identity();
                 let r = bytes.freeze();
 
-                Poll::Ready(Some((id, Ok(r))))
+                Poll::Ready(Some(Ok(r)))
             }
         }
     }
