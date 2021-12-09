@@ -13,7 +13,10 @@ use std::{
 use thiserror::Error;
 
 #[derive(Clone)]
-pub struct SecretKey([u8; Self::SIZE]);
+pub struct SecretKey {
+    secret: [u8; Self::SIZE],
+    public: [u8; 32],
+}
 
 pub use crate::key::ed25519::{PublicKey, PublicKeyError};
 
@@ -23,7 +26,10 @@ impl SecretKey {
     /// create a dummy instance of the object but filled with zeroes
     #[inline(always)]
     const fn zero() -> Self {
-        Self([0; Self::SIZE])
+        Self {
+            secret: [0; Self::SIZE],
+            public: [0; 32],
+        }
     }
 
     /// generate a new `SecretKey` with the given random number generator
@@ -33,11 +39,14 @@ impl SecretKey {
         Rng: RngCore + CryptoRng,
     {
         let mut s = Self::zero();
-        rng.fill_bytes(&mut s.0);
+        rng.fill_bytes(&mut s.secret);
 
-        s.0[0] &= 0b1111_1000;
-        s.0[31] &= 0b0011_1111;
-        s.0[31] |= 0b0100_0000;
+        s.secret[0] &= 0b1111_1000;
+        s.secret[31] &= 0b0011_1111;
+        s.secret[31] |= 0b0100_0000;
+
+        let pk = cryptoxide::curve25519::curve25519_base(&s.secret);
+        s.public = pk;
 
         debug_assert!(
             s.check_structure(),
@@ -49,9 +58,9 @@ impl SecretKey {
 
     #[allow(clippy::verbose_bit_mask)]
     fn check_structure(&self) -> bool {
-        (self.0[0] & 0b0000_0111) == 0
-            && (self.0[31] & 0b0100_0000) == 0b0100_0000
-            && (self.0[31] & 0b1000_0000) == 0
+        (self.secret[0] & 0b0000_0111) == 0
+            && (self.secret[31] & 0b0100_0000) == 0b0100_0000
+            && (self.secret[31] & 0b1000_0000) == 0
     }
 
     /// get the `PublicKey` associated to this key
@@ -61,16 +70,14 @@ impl SecretKey {
     /// `Signature` generated with this `SecretKey` and the original
     /// message.
     pub fn public_key(&self) -> PublicKey {
-        let pk = cryptoxide::curve25519::curve25519_base(&self.0);
-
-        PublicKey::from(pk)
+        PublicKey::from(self.public)
     }
 
     /// generate a shared secret between the owner of the given Curve25519 public key and
     /// ourselves.
     ///
     pub fn exchange(&self, public_key: &PublicKey) -> SharedSecret {
-        SharedSecret::new(curve25519(&self.0, public_key.as_ref()))
+        SharedSecret::new(curve25519(&self.secret, public_key.as_ref()))
     }
 
     /// get a reference to the inner Seed bytes
@@ -80,7 +87,7 @@ impl SecretKey {
     /// be mindful that leaking the content of the internal signing key
     /// may result in losing the ultimate control of the signing key
     pub(crate) fn leak_as_ref(&self) -> &[u8; Self::SIZE] {
-        &self.0
+        &self.secret
     }
 }
 
@@ -92,7 +99,7 @@ impl SecretKey {
 impl Debug for SecretKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_tuple("SecretKey<Ed25519Extended>")
-            .field(&hex::encode(&self.0[..]))
+            .field(&hex::encode(&self.secret[..]))
             .finish()
     }
 }
@@ -122,7 +129,11 @@ impl TryFrom<[u8; Self::SIZE]> for SecretKey {
     type Error = SecretKeyError;
 
     fn try_from(bytes: [u8; Self::SIZE]) -> Result<Self, Self::Error> {
-        let s = Self(bytes);
+        let public = cryptoxide::curve25519::curve25519_base(&bytes);
+        let s = Self {
+            secret: bytes,
+            public,
+        };
         if s.check_structure() {
             Ok(s)
         } else {
@@ -148,7 +159,9 @@ impl FromStr for SecretKey {
     type Err = hex::FromHexError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut r = Self::zero();
-        hex::decode_to_slice(s, &mut r.0)?;
+        hex::decode_to_slice(s, &mut r.secret)?;
+        let public = cryptoxide::curve25519::curve25519_base(&r.secret);
+        r.public = public;
         Ok(r)
     }
 }
@@ -157,7 +170,7 @@ impl FromStr for SecretKey {
 
 impl PartialEq<Self> for SecretKey {
     fn eq(&self, other: &Self) -> bool {
-        unsafe { memsec::memeq(self.0.as_ptr(), other.0.as_ptr(), Self::SIZE) }
+        unsafe { memsec::memeq(self.secret.as_ptr(), other.secret.as_ptr(), Self::SIZE) }
     }
 }
 
@@ -167,7 +180,7 @@ impl Eq for SecretKey {}
 
 impl Hash for SecretKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.as_ref().hash(state)
+        self.secret.as_ref().hash(state)
     }
 }
 
@@ -178,7 +191,7 @@ impl Hash for SecretKey {
 /// the memory
 impl Drop for SecretKey {
     fn drop(&mut self) {
-        self.0.scrub()
+        self.secret.scrub()
     }
 }
 
@@ -190,13 +203,13 @@ mod tests {
     impl Arbitrary for SecretKey {
         fn arbitrary(g: &mut Gen) -> Self {
             let mut s = Self::zero();
-            s.0.iter_mut().for_each(|byte| {
+            s.secret.iter_mut().for_each(|byte| {
                 *byte = u8::arbitrary(g);
             });
 
-            s.0[0] &= 0b1111_1000;
-            s.0[31] &= 0b0011_1111;
-            s.0[31] |= 0b0100_0000;
+            s.secret[0] &= 0b1111_1000;
+            s.secret[31] &= 0b0011_1111;
+            s.secret[31] |= 0b0100_0000;
 
             s
         }
