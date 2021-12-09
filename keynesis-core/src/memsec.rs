@@ -209,7 +209,7 @@ mod tests {
     fn neq(a: Vec<u8>, b: Vec<u8>) -> TestResult {
         let len = std::cmp::min(a.len(), b.len());
 
-        if a == b || len == 0 {
+        if a[..len] == b[..len] || len == 0 {
             TestResult::discard()
         } else {
             let b = unsafe { memeq(a.as_ptr(), b.as_ptr(), len) };
