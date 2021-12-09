@@ -41,26 +41,10 @@ impl SecretKey {
         let mut s = Self::zero();
         rng.fill_bytes(&mut s.secret);
 
-        s.secret[0] &= 0b1111_1000;
-        s.secret[31] &= 0b0011_1111;
-        s.secret[31] |= 0b0100_0000;
-
         let pk = cryptoxide::curve25519::curve25519_base(&s.secret);
         s.public = pk;
 
-        debug_assert!(
-            s.check_structure(),
-            "checking we properly set the bit tweaks for the extended Ed25519"
-        );
-
         s
-    }
-
-    #[allow(clippy::verbose_bit_mask)]
-    fn check_structure(&self) -> bool {
-        (self.secret[0] & 0b0000_0111) == 0
-            && (self.secret[31] & 0b0100_0000) == 0b0100_0000
-            && (self.secret[31] & 0b1000_0000) == 0
     }
 
     /// get the `PublicKey` associated to this key
@@ -121,23 +105,14 @@ impl Debug for SecretKey {
 pub enum SecretKeyError {
     #[error("Invalid size, expecting {}", SecretKey::SIZE)]
     InvalidSize,
-    #[error("Invalid structure")]
-    InvalidStructure,
 }
 
-impl TryFrom<[u8; Self::SIZE]> for SecretKey {
-    type Error = SecretKeyError;
-
-    fn try_from(bytes: [u8; Self::SIZE]) -> Result<Self, Self::Error> {
+impl From<[u8; Self::SIZE]> for SecretKey {
+    fn from(bytes: [u8; Self::SIZE]) -> Self {
         let public = cryptoxide::curve25519::curve25519_base(&bytes);
-        let s = Self {
+        Self {
             secret: bytes,
             public,
-        };
-        if s.check_structure() {
-            Ok(s)
-        } else {
-            Err(Self::Error::InvalidStructure)
         }
     }
 }
@@ -150,7 +125,7 @@ impl<'a> TryFrom<&'a [u8]> for SecretKey {
         } else {
             let mut s = [0; Self::SIZE];
             s.copy_from_slice(value);
-            Self::try_from(s)
+            Ok(Self::from(s))
         }
     }
 }
@@ -207,10 +182,6 @@ mod tests {
                 *byte = u8::arbitrary(g);
             });
 
-            s.secret[0] &= 0b1111_1000;
-            s.secret[31] &= 0b0011_1111;
-            s.secret[31] |= 0b0100_0000;
-
             s.public = cryptoxide::curve25519::curve25519_base(&s.secret);
 
             s
@@ -232,9 +203,6 @@ mod tests {
             Err(SecretKeyError::InvalidSize) => {
                 TestResult::error("was expecting the test to pass, not an invalid size")
             }
-            Err(SecretKeyError::InvalidStructure) => {
-                TestResult::error("was expecting the test to pass, not an invalid structure")
-            }
         }
     }
 
@@ -248,9 +216,6 @@ mod tests {
                 "Expecting to fail with invalid size instead of having a valid value",
             ),
             Err(SecretKeyError::InvalidSize) => TestResult::passed(),
-            Err(SecretKeyError::InvalidStructure) => {
-                TestResult::error("was expecting an invalid size error, not an invalid structure")
-            }
         }
     }
 }
