@@ -103,7 +103,7 @@ impl CipherState {
                 return Err(CipherStateError::NotEnoughOutput);
             }
 
-            let mut ctx = Context::new(&self.k, &self.n.to_bytes());
+            let mut ctx = Context::<20>::new(&self.k, &self.n.to_bytes());
             ctx.add_data(ad.as_ref());
             let mut ctx = ctx.to_encryption();
 

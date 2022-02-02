@@ -36,7 +36,7 @@ pub struct Signature(#[packed(accessor = false)] [u8; Self::SIZE]);
 
 impl SecretKey {
     /// the size of the Secret key in bytes
-    pub const SIZE: usize = ed25519::SEED_LENGTH;
+    pub const SIZE: usize = ed25519::PRIVATE_KEY_LENGTH;
 
     /// create a dummy instance of the object but filled with zeroes
     #[inline(always)]
@@ -59,7 +59,7 @@ impl SecretKey {
     /// ourselves.
     ///
     pub fn exchange(&self, public_key: &PublicKey) -> SharedSecret {
-        SharedSecret::new(ed25519::exchange(public_key.as_ref(), &self.0))
+        SharedSecret::new(ed25519::exchange(public_key.bytes(), &self.0))
     }
 
     /// get the `PublicKey` associated to this key
@@ -120,6 +120,11 @@ impl PublicKey {
     /// generated the `Signature` with the original message (non repudiation).
     pub fn verify<T: AsRef<[u8]>>(&self, msg: T, signature: &Signature) -> bool {
         ed25519::verify(msg.as_ref(), &self.0, &signature.0)
+    }
+
+    /// Get the bytes associated with this public key
+    pub fn bytes(&self) -> &[u8; 32] {
+        &self.0
     }
 }
 
