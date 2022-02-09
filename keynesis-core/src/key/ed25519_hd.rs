@@ -3,7 +3,7 @@ use crate::{
     memsec::Scrubbed as _,
 };
 use cryptoxide::{
-    curve25519::{ge_scalarmult_base, GeP3},
+    curve25519::{Ge, Scalar},
     hmac::Hmac,
     mac::Mac,
     sha2::Sha512,
@@ -167,7 +167,7 @@ impl SecretKey {
         // left = kl + 8 * trunc28(zl)
         let mut left = add_28_mul8(kl, zl);
         // right = zr + kr
-        let mut right = add_256bits(kr, zr);
+        let mut right = add_256bits(kr.try_into().unwrap(), zr.try_into().unwrap());
 
         let mut i_out = [0u8; 64];
         i_mac.raw_result(&mut i_out);
@@ -212,7 +212,7 @@ impl PublicKey {
     where
         P: AsRef<[u8]>,
     {
-        let pk = self.key().as_ref();
+        let pk = self.key().bytes();
         let chaincode = self.chain_code().as_ref();
 
         let mut z_mac = Hmac::new(Sha512::new(), chaincode);
@@ -230,7 +230,7 @@ impl PublicKey {
         let _zr = &z_out[32..64];
 
         // left = kl + 8 * trunc28(zl)
-        let left = point_plus(pk, &point_of_trunc28_mul8(zl))?;
+        let left = point_plus(pk, &point_of_trunc28_mul8(zl.try_into().unwrap()))?;
 
         let mut i_out = [0u8; 64];
         i_mac.raw_result(&mut i_out);
@@ -249,18 +249,18 @@ impl PublicKey {
 
 /* *************************************************************** */
 
-fn point_of_trunc28_mul8(sk: &[u8]) -> [u8; 32] {
-    assert!(sk.len() == 32);
+fn point_of_trunc28_mul8(sk: &[u8; 32]) -> [u8; 32] {
     let copy = add_28_mul8(&[0u8; 32], sk);
-    let a = ge_scalarmult_base(&copy);
+    let scalar = Scalar::from_bytes(&copy);
+    let a = Ge::scalarmult_base(&scalar);
     a.to_bytes()
 }
 
-fn point_plus(p1: &[u8], p2: &[u8]) -> Option<[u8; 32]> {
-    let a = GeP3::from_bytes_negate_vartime(p1)?;
-    let b = GeP3::from_bytes_negate_vartime(p2)?;
-    let r = a + b.to_cached();
-    let mut r = r.to_p2().to_bytes();
+fn point_plus(p1: &[u8; 32], p2: &[u8; 32]) -> Option<[u8; 32]> {
+    let a = Ge::from_bytes(p1)?;
+    let b = Ge::from_bytes(p2)?;
+    let r = &a + &b.to_cached();
+    let mut r = r.to_partial().to_bytes();
     r[31] ^= 0x80;
     Some(r)
 }
@@ -285,10 +285,7 @@ fn add_28_mul8(x: &[u8], y: &[u8]) -> [u8; 32] {
     out
 }
 
-fn add_256bits(x: &[u8], y: &[u8]) -> [u8; 32] {
-    assert!(x.len() == 32);
-    assert!(y.len() == 32);
-
+fn add_256bits(x: &[u8; 32], y: &[u8; 32]) -> [u8; 32] {
     let mut carry: u16 = 0;
     let mut out = [0u8; 32];
     for i in 0..32 {

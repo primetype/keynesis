@@ -61,7 +61,7 @@ impl SecretKey {
     /// ourselves.
     ///
     pub fn exchange(&self, public_key: &PublicKey) -> SharedSecret {
-        SharedSecret::new(curve25519(&self.secret, public_key.as_ref()))
+        SharedSecret::new(curve25519(&self.secret, public_key.bytes()))
     }
 
     /// get a reference to the inner Seed bytes

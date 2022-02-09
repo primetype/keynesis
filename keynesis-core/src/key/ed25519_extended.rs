@@ -21,7 +21,7 @@ pub struct SecretKey([u8; Self::SIZE]);
 pub use crate::key::ed25519::{PublicKey, PublicKeyError, Signature};
 
 impl SecretKey {
-    pub const SIZE: usize = ed25519::PRIVATE_KEY_LENGTH;
+    pub const SIZE: usize = ed25519::EXTENDED_KEY_LENGTH;
 
     /// create a dummy instance of the object but filled with zeroes
     #[inline(always)]
@@ -72,7 +72,7 @@ impl SecretKey {
     /// `Signature` generated with this `SecretKey` and the original
     /// message.
     pub fn public_key(&self) -> PublicKey {
-        let pk = ed25519::to_public(&self.0);
+        let pk = ed25519::extended_to_public(&self.0);
 
         PublicKey::from(pk)
     }
@@ -81,10 +81,13 @@ impl SecretKey {
     /// ourselves.
     ///
     pub fn exchange(&self, public_key: &PublicKey) -> SharedSecret {
-        let ed_y = Fe::from_bytes(public_key.as_ref());
+        let ed_y = Fe::from_bytes(public_key.bytes());
         let mont_x = edwards_to_montgomery_x(&ed_y);
 
-        SharedSecret::new(curve25519(&self.0, &mont_x.to_bytes()))
+        SharedSecret::new(curve25519(
+            &self.0[0..32].try_into().unwrap(),
+            &mont_x.to_bytes(),
+        ))
     }
 
     /// create a `Signature` for the given message with this `SecretKey`.
@@ -110,12 +113,12 @@ impl SecretKey {
 
 #[inline]
 fn edwards_to_montgomery_x(ed_y: &Fe) -> Fe {
-    let ed_z = &Fe([1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let ed_z = &Fe::ONE;
     let temp_x = ed_z + ed_y;
     let temp_z = ed_z - ed_y;
     let temp_z_inv = temp_z.invert();
 
-    temp_x * temp_z_inv
+    &temp_x * &temp_z_inv
 }
 
 /* Format ****************************************************************** */
