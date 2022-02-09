@@ -4,6 +4,9 @@ version = "1.0.1"
 authors = ["Symbolic Software <georgio@symbolic.software>"]
 edition = "2018"
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 blake2-rfc = "0.2.18"
 constant_time_eq = "0.1.3"
