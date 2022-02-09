@@ -9,8 +9,7 @@ use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
 const MIN_FRAME_LENGTH: usize = 16; // the length and the 16 bytes of mac
-pub const MAX_FRAME_LENGTH: usize = u16::MAX as usize - HEAD_LENGTH;
-const HEAD_LENGTH: usize = std::mem::size_of::<u16>();
+const HEAD_LENGTH: usize = std::mem::size_of::<u32>();
 
 /**
 # Decoder for encrypted connections
@@ -106,19 +105,12 @@ impl NoiseEncryptedDecoder {
             return Ok(None);
         }
 
-        let n = src.get_u16() as usize;
+        let n = src.get_u32() as usize;
 
         if n < MIN_FRAME_LENGTH {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "frame is too short",
-            ));
-        }
-
-        if n > MAX_FRAME_LENGTH {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "frame is too long",
             ));
         }
 
@@ -175,18 +167,11 @@ impl Encoder<Bytes> for NoiseEncryptedEncoder {
     fn encode(&mut self, item: Bytes, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let n = item.len();
 
-        if n > (MAX_FRAME_LENGTH - 16) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "frame is too long",
-            ));
-        }
-
         let n = n.wrapping_add(16);
 
         dst.reserve(HEAD_LENGTH + n);
 
-        dst.put_u16(n as u16);
+        dst.put_u32(n as u32);
 
         let mut output = vec![0; n];
         if let Err(error) = self.noise.send(item.as_ref(), &mut output) {
