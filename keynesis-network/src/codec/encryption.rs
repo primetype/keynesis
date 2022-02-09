@@ -9,6 +9,7 @@ use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
 const MIN_FRAME_LENGTH: usize = 16; // the length and the 16 bytes of mac
+pub const MAX_FRAME_LENGTH: usize = u32::MAX as usize - HEAD_LENGTH;
 const HEAD_LENGTH: usize = std::mem::size_of::<u32>();
 
 /**
@@ -114,6 +115,13 @@ impl NoiseEncryptedDecoder {
             ));
         }
 
+        if n > MAX_FRAME_LENGTH {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "frame is too long",
+            ));
+        }
+
         src.reserve(n);
 
         Ok(Some(n))
@@ -166,6 +174,13 @@ impl Encoder<Bytes> for NoiseEncryptedEncoder {
     type Error = io::Error;
     fn encode(&mut self, item: Bytes, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let n = item.len();
+
+        if n > (MAX_FRAME_LENGTH - 16) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "frame is too long",
+            ));
+        }
 
         let n = n.wrapping_add(16);
 
