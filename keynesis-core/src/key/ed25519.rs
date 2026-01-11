@@ -1,4 +1,5 @@
 use crate::{
+    buffer::BufRead,
     key::SharedSecret,
     memsec::{self, Scrubbed as _},
 };
@@ -125,6 +126,20 @@ impl PublicKey {
     /// Get the bytes associated with this public key
     pub fn bytes(&self) -> &[u8; 32] {
         &self.0
+    }
+}
+
+impl super::PublicKey for PublicKey {
+    const SIZE: usize = 32;
+
+    fn read(input: &mut BufRead) -> anyhow::Result<Self> {
+        let mut buf = [0; Self::SIZE];
+        if input.remaining() >= Self::SIZE {
+            input.read(&mut buf);
+            Ok(Self::from(buf))
+        } else {
+            anyhow::bail!("Not enough bytes to read a public key")
+        }
     }
 }
 

@@ -23,11 +23,14 @@ fn ik(b: &mut Bencher) {
         let responder = Builder::new(pattern.clone());
         let mut initiator = initiator
             .local_private_key(&initiator_key.private)
+            .unwrap()
             .remote_public_key(&responder_key.public)
+            .unwrap()
             .build_initiator()
             .unwrap();
         let mut responder = responder
             .local_private_key(&responder_key.private)
+            .unwrap()
             .build_responder()
             .unwrap();
 

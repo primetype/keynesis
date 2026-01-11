@@ -3,7 +3,7 @@ use std::io::Write;
 use crate::{
     buffer::BufRead,
     hash::Hash,
-    key::{ed25519::PublicKey, Dh},
+    key::Dh,
     noise::{CipherState, HandshakeState, HandshakeStateError},
     seed::Seed,
 };
@@ -62,7 +62,7 @@ where
     /// sent, we won't be able to decode it back.
     pub fn send(
         self,
-        rs: &PublicKey,
+        rs: &DH::Public,
         payload: impl AsRef<[u8]>,
         mut output: impl Write,
     ) -> Result<(), HandshakeStateError> {
@@ -104,15 +104,24 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "macos")]
+    use crate::key::secp256r1;
     use crate::key::{curve25519, ed25519, ed25519_extended, ed25519_hd};
     use cryptoxide::{blake2b::Blake2b, blake2s::Blake2s};
+    use std::fmt::Debug;
 
-    fn send_one_way_n<H: Hash, K1: Dh, K2: Dh>(
+    fn send_one_way_n<H, K1, K2>(
         rng1: crate::Seed,
         rng2: crate::Seed,
         receiver_s: K2,
         message: Vec<u8>,
-    ) -> bool {
+    ) -> bool
+    where
+        H: Hash,
+        K1: Dh,
+        K2: Dh<Public = K1::Public>,
+        K1::Public: Debug + PartialEq,
+    {
         let receiver_key = receiver_s.public();
 
         let sender = N::<K1, H, _>::new(rng1.into_rand_chacha(), &None, &[]);
@@ -131,13 +140,19 @@ mod tests {
         message.as_slice() == decoded_message.as_ref()
     }
 
-    fn send_one_way_n_psk0<H: Hash, K1: Dh, K2: Dh>(
+    fn send_one_way_n_psk0<H, K1, K2>(
         rng1: crate::Seed,
         rng2: crate::Seed,
         psk: crate::Seed,
         receiver_s: K2,
         message: Vec<u8>,
-    ) -> bool {
+    ) -> bool
+    where
+        H: Hash,
+        K1: Dh,
+        K2: Dh<Public = K1::Public>,
+        K1::Public: Debug + PartialEq,
+    {
         let receiver_key = receiver_s.public();
 
         let sender = N::<K1, H, _>::new(rng1.into_rand_chacha(), &Some(psk.clone()), &[]);
@@ -305,6 +320,22 @@ mod tests {
         ed25519_hd_to_ed25519_hd_blake2s,
         ed25519_hd::SecretKey,
         ed25519_hd::SecretKey,
+        Blake2s
+    );
+
+    #[cfg(target_os = "macos")]
+    mk_test!(
+        secp256r1_to_secp256r1_blake2b,
+        secp256r1::P256r1PrivateKey,
+        secp256r1::P256r1PrivateKey,
+        Blake2b
+    );
+
+    #[cfg(target_os = "macos")]
+    mk_test!(
+        secp256r1_to_secp256r1_blake2s,
+        secp256r1::P256r1PrivateKey,
+        secp256r1::P256r1PrivateKey,
         Blake2s
     );
 }

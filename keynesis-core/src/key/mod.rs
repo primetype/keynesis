@@ -61,7 +61,7 @@ use cryptoxide::chacha20::ChaCha20;
 #     &bob_root_pk.derive(b"encryption:alice").unwrap()
 # );
 #
-const NONCE: &[u8] = b"0123456789ab";
+const NONCE: [u8;12] = [0x12;12];
 let mut encryption_context = ChaCha20::new(shared_secret_with_bob.as_ref(), &NONCE);
 # let mut decryption_context = ChaCha20::new(shared_secret_with_bob.as_ref(), &NONCE);
 let message: &[u8] = b"Secret Message between alice and bob";
@@ -78,24 +78,37 @@ pub mod curve25519;
 pub mod ed25519;
 pub mod ed25519_extended;
 pub mod ed25519_hd;
+pub mod secp256r1;
 mod shared_secret;
 
 pub use self::shared_secret::SharedSecret;
+use crate::buffer::BufRead;
+use anyhow::Result;
 use rand_core::{CryptoRng, RngCore};
 
+pub trait PublicKey: AsRef<[u8]> + for<'a> TryFrom<&'a [u8]> + Clone {
+    const SIZE: usize;
+
+    fn read(input: &mut BufRead) -> Result<Self>;
+}
+
 pub trait Dh {
+    type Public: PublicKey;
+
     fn name() -> &'static str;
 
     fn generate<RNG>(rng: &mut RNG) -> Self
     where
         RNG: RngCore + CryptoRng;
 
-    fn public(&self) -> ed25519::PublicKey;
+    fn public(&self) -> Self::Public;
 
-    fn dh(&self, public: &ed25519::PublicKey) -> SharedSecret;
+    fn dh(&self, public: &Self::Public) -> SharedSecret;
 }
 
 impl Dh for curve25519::SecretKey {
+    type Public = ed25519::PublicKey;
+
     fn name() -> &'static str {
         "25519"
     }
@@ -118,7 +131,35 @@ impl Dh for curve25519::SecretKey {
     }
 }
 
+#[cfg(target_os = "macos")]
+impl Dh for secp256r1::P256r1PrivateKey {
+    type Public = secp256r1::P256r1PublicKey;
+
+    fn name() -> &'static str {
+        "P256"
+    }
+
+    fn generate<RNG>(_rng: &mut RNG) -> Self
+    where
+        RNG: RngCore + CryptoRng,
+    {
+        Self::generate_ephemeral().unwrap()
+    }
+
+    #[inline]
+    fn public(&self) -> secp256r1::P256r1PublicKey {
+        secp256r1::P256r1PrivateKey::public(self).unwrap()
+    }
+
+    #[inline]
+    fn dh(&self, public: &secp256r1::P256r1PublicKey) -> SharedSecret {
+        self.dh(public).unwrap()
+    }
+}
+
 impl Dh for ed25519::SecretKey {
+    type Public = ed25519::PublicKey;
+
     fn name() -> &'static str {
         "ed25519"
     }
@@ -142,6 +183,8 @@ impl Dh for ed25519::SecretKey {
 }
 
 impl Dh for ed25519_extended::SecretKey {
+    type Public = ed25519::PublicKey;
+
     fn name() -> &'static str {
         "ed25519"
     }
@@ -165,6 +208,8 @@ impl Dh for ed25519_extended::SecretKey {
 }
 
 impl Dh for ed25519_hd::SecretKey {
+    type Public = ed25519::PublicKey;
+
     fn name() -> &'static str {
         "ed25519"
     }

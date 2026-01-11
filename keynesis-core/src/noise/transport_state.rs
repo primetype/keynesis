@@ -1,6 +1,6 @@
 use crate::{
     hash::Hash,
-    key::ed25519::PublicKey,
+    key::PublicKey,
     noise::{CipherState, CipherStateError},
 };
 
@@ -12,31 +12,31 @@ use crate::{
 ///
 /// All messages are authenticated and because we are rekeying after
 /// each messages we have strong forward secrecy.
-pub struct TransportState<H: Hash> {
+pub struct TransportState<H: Hash, PK: PublicKey> {
     handshake_hash: H::HASH,
     local: CipherState,
     remote: CipherState,
-    remote_id: PublicKey,
+    remote_id: PK,
 }
 
-pub struct TransportSendHalf<H: Hash> {
+pub struct TransportSendHalf<H: Hash, PK: PublicKey> {
     handshake_hash: H::HASH,
     local: CipherState,
-    remote_id: PublicKey,
+    remote_id: PK,
 }
 
-pub struct TransportReceiveHalf<H: Hash> {
+pub struct TransportReceiveHalf<H: Hash, PK: PublicKey> {
     handshake_hash: H::HASH,
     remote: CipherState,
-    remote_id: PublicKey,
+    remote_id: PK,
 }
 
-impl<H: Hash> TransportState<H> {
+impl<H: Hash, PK: PublicKey> TransportState<H, PK> {
     pub(crate) fn new(
         handshake_hash: H::HASH,
         local: CipherState,
         remote: CipherState,
-        remote_id: PublicKey,
+        remote_id: PK,
     ) -> Self {
         TransportState {
             handshake_hash,
@@ -50,7 +50,7 @@ impl<H: Hash> TransportState<H> {
     ///
     /// this is to make it easier to handle bidirectional connections
     /// asynchronously.
-    pub fn split(self) -> (TransportSendHalf<H>, TransportReceiveHalf<H>) {
+    pub fn split(self) -> (TransportSendHalf<H, PK>, TransportReceiveHalf<H, PK>) {
         let Self {
             handshake_hash,
             local,
@@ -60,7 +60,7 @@ impl<H: Hash> TransportState<H> {
         let send = TransportSendHalf {
             handshake_hash: handshake_hash.clone(),
             local,
-            remote_id,
+            remote_id: remote_id.clone(),
         };
 
         let receive = TransportReceiveHalf {
@@ -78,7 +78,7 @@ impl<H: Hash> TransportState<H> {
     }
 
     /// get the remote's public identity
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         &self.remote_id
     }
 
@@ -137,14 +137,14 @@ impl<H: Hash> TransportState<H> {
     }
 }
 
-impl<H: Hash> TransportSendHalf<H> {
+impl<H: Hash, PK: PublicKey> TransportSendHalf<H, PK> {
     /// unique identifier of the noise session
     pub fn noise_session(&self) -> &H::HASH {
         &self.handshake_hash
     }
 
     /// get the remote's public identity
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         &self.remote_id
     }
 
@@ -176,14 +176,14 @@ impl<H: Hash> TransportSendHalf<H> {
     }
 }
 
-impl<H: Hash> TransportReceiveHalf<H> {
+impl<H: Hash, PK: PublicKey> TransportReceiveHalf<H, PK> {
     /// unique identifier of the noise session
     pub fn noise_session(&self) -> &H::HASH {
         &self.handshake_hash
     }
 
     /// get the remote's public identity
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         &self.remote_id
     }
 
@@ -219,9 +219,9 @@ impl<H: Hash> TransportReceiveHalf<H> {
 pub(crate) mod tests {
     use super::*;
 
-    pub fn test_transport<H: Hash>(
-        mut initiator: TransportState<H>,
-        mut responder: TransportState<H>,
+    pub fn test_transport<H: Hash, PK: PublicKey>(
+        mut initiator: TransportState<H, PK>,
+        mut responder: TransportState<H, PK>,
         messages_init_to_responder: Vec<Vec<u8>>,
         messages_resp_to_initiator: Vec<Vec<u8>>,
     ) -> bool {

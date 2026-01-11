@@ -1,7 +1,7 @@
 use crate::{
     buffer::BufRead,
     hash::Hash,
-    key::{ed25519_extended::PublicKey, Dh},
+    key::{Dh, PublicKey},
     noise::{CipherState, CipherStateError, SymmetricState},
 };
 use rand_core::{CryptoRng, RngCore};
@@ -83,7 +83,7 @@ where
         self.symmetric_state.mix_key_and_hash(psk);
     }
 
-    pub(crate) fn mix_hash(&mut self, pk: &PublicKey) {
+    pub(crate) fn mix_hash(&mut self, pk: &DH::Public) {
         self.symmetric_state.mix_hash(pk.as_ref());
     }
 
@@ -102,27 +102,25 @@ where
     pub(crate) fn read_e(
         &mut self,
         input: &mut BufRead<'_>,
-    ) -> Result<PublicKey, HandshakeStateError> {
-        if input.remaining() < PublicKey::SIZE {
-            Err(HandshakeStateError::ExpectingPublicKey)
-        } else {
-            let mut pk = [0; PublicKey::SIZE];
-            input.read(&mut pk);
+    ) -> Result<DH::Public, HandshakeStateError> {
+        if let Ok(pk) = DH::Public::read(input) {
             self.symmetric_state.mix_hash(&pk);
             if self.is_psk {
                 self.symmetric_state.mix_key(&pk);
             }
-            Ok(PublicKey::from(pk))
+            Ok(pk)
+        } else {
+            Err(HandshakeStateError::ExpectingPublicKey)
         }
     }
 
     pub(crate) fn write_s(
         &mut self,
-        s: &PublicKey,
+        s: &DH::Public,
         mut output: impl Write,
     ) -> Result<(), HandshakeStateError> {
-        let len = self.encrypted_len(PublicKey::SIZE);
-        let mut pk = [0; PublicKey::SIZE + CipherState::TAG_LEN];
+        let len = self.encrypted_len(DH::Public::SIZE);
+        let mut pk = [0; 128 + CipherState::TAG_LEN];
         self.symmetric_state
             .encrypt_and_hash(s.as_ref(), &mut pk[..len])?;
         output.write_all(&pk[..len])?;
@@ -132,16 +130,18 @@ where
     pub(crate) fn read_s(
         &mut self,
         input: &mut BufRead<'_>,
-    ) -> Result<PublicKey, HandshakeStateError> {
-        let len = self.encrypted_len(PublicKey::SIZE);
+    ) -> Result<DH::Public, HandshakeStateError> {
+        let len = self.encrypted_len(DH::Public::SIZE);
+
         if input.remaining() < len {
             Err(HandshakeStateError::NotEnoughInput)
         } else {
-            let mut pk = [0; PublicKey::SIZE];
+            let mut pk = [0; 128];
             self.symmetric_state
-                .decrypt_and_hash(&input.slice(len), &mut pk)?;
+                .decrypt_and_hash(&input.slice(len), &mut pk[..DH::Public::SIZE])?;
             input.advance(len);
-            Ok(PublicKey::from(pk))
+            DH::Public::try_from(&pk[..DH::Public::SIZE])
+                .map_err(|_| HandshakeStateError::ExpectingPublicKey)
         }
     }
 
@@ -171,7 +171,7 @@ where
         Ok(())
     }
 
-    pub(crate) fn dh_ex(&mut self, re: &PublicKey) {
+    pub(crate) fn dh_ex(&mut self, re: &DH::Public) {
         if let Some(e) = &self.e {
             let dh = e.dh(re);
             self.symmetric_state.mix_key(dh);
@@ -184,7 +184,7 @@ where
         }
     }
 
-    pub(crate) fn dh_sx<K: Dh>(&mut self, s: &K, e: &PublicKey) {
+    pub(crate) fn dh_sx(&mut self, s: &DH, e: &DH::Public) {
         let dh = s.dh(e);
         self.symmetric_state.mix_key(dh.as_ref());
     }

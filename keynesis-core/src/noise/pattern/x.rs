@@ -1,12 +1,11 @@
-use std::io::Write;
-
 use crate::{
     buffer::BufRead,
     hash::Hash,
-    key::{ed25519::PublicKey, Dh},
+    key::Dh,
     noise::{CipherState, HandshakeState, HandshakeStateError},
 };
 use rand_core::{CryptoRng, RngCore};
+use std::io::Write;
 
 /// One-Way Handshake [**Noise X**]
 ///
@@ -56,7 +55,7 @@ where
     pub fn send(
         self,
         s: &DH,
-        rs: &PublicKey,
+        rs: &DH::Public,
         payload: impl AsRef<[u8]>,
         mut output: impl Write,
     ) -> Result<(), HandshakeStateError> {
@@ -84,7 +83,7 @@ where
         self,
         s: &DH,
         input: &[u8],
-    ) -> Result<(PublicKey, Box<[u8]>), HandshakeStateError> {
+    ) -> Result<(DH::Public, Box<[u8]>), HandshakeStateError> {
         let Self { mut inner } = self;
 
         inner.mix_hash(&s.public());
@@ -105,17 +104,27 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+
     use super::*;
+    #[cfg(target_os = "macos")]
+    use crate::key::secp256r1;
     use crate::key::{curve25519, ed25519, ed25519_extended, ed25519_hd};
     use cryptoxide::{blake2b::Blake2b, blake2s::Blake2s};
 
-    fn send_one_way_x<H: Hash, K1: Dh, K2: Dh>(
+    fn send_one_way_x<H, K1, K2>(
         rng1: crate::Seed,
         rng2: crate::Seed,
         sender_s: K1,
         receiver_s: K2,
         message: Vec<u8>,
-    ) -> bool {
+    ) -> bool
+    where
+        H: Hash,
+        K1: Dh,
+        K2: Dh<Public = K1::Public>,
+        K1::Public: Debug + PartialEq,
+    {
         let sender_key = sender_s.public();
         let receiver_key = receiver_s.public();
 
@@ -273,6 +282,22 @@ mod tests {
         ed25519_hd_to_ed25519_hd_blake2s,
         ed25519_hd::SecretKey,
         ed25519_hd::SecretKey,
+        Blake2s
+    );
+
+    #[cfg(target_os = "macos")]
+    mk_test!(
+        secp256r1_to_secp256r1_blake2b,
+        secp256r1::P256r1PrivateKey,
+        secp256r1::P256r1PrivateKey,
+        Blake2b
+    );
+
+    #[cfg(target_os = "macos")]
+    mk_test!(
+        secp256r1_to_secp256r1_blake2s,
+        secp256r1::P256r1PrivateKey,
+        secp256r1::P256r1PrivateKey,
         Blake2s
     );
 }

@@ -8,7 +8,7 @@ use noiseexplorer_ik as noise;
 
 #[test]
 fn ref_talk_to_keynesis() {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let seed = Seed::generate(&mut rng);
     let mut rng = seed.into_rand_chacha();
 

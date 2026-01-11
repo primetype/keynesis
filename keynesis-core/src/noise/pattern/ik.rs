@@ -1,7 +1,7 @@
 use crate::{
     buffer::BufRead,
     hash::Hash,
-    key::{ed25519::PublicKey, Dh},
+    key::{Dh, PublicKey},
     noise::{HandshakeState, HandshakeStateError, TransportState},
 };
 use rand_core::{CryptoRng, RngCore};
@@ -20,12 +20,12 @@ where
 }
 
 pub struct A;
-pub struct WaitB {
-    rs: PublicKey,
+pub struct WaitB<PK: PublicKey> {
+    rs: PK,
 }
-pub struct SendB {
-    re: PublicKey,
-    rs: PublicKey,
+pub struct SendB<PK: PublicKey> {
+    re: PK,
+    rs: PK,
 }
 
 impl<DH, H, RNG> IK<DH, H, RNG, A>
@@ -54,15 +54,12 @@ where
     DH: Dh,
     H: Hash,
 {
-    pub fn initiate<K>(
+    pub fn initiate(
         self,
-        s: &K,
-        rs: PublicKey,
+        s: &DH,
+        rs: DH::Public,
         mut output: impl Write,
-    ) -> Result<IK<DH, H, RNG, WaitB>, HandshakeStateError>
-    where
-        K: Dh,
-    {
+    ) -> Result<IK<DH, H, RNG, WaitB<DH::Public>>, HandshakeStateError> {
         let Self {
             mut inner,
             state: A,
@@ -92,7 +89,7 @@ where
         self,
         s: &DH,
         input: &[u8],
-    ) -> Result<IK<DH, H, RNG, SendB>, HandshakeStateError> {
+    ) -> Result<IK<DH, H, RNG, SendB<DH::Public>>, HandshakeStateError> {
         let Self {
             mut inner,
             state: A,
@@ -115,17 +112,20 @@ where
         })
     }
 }
-impl<DH, H, RNG> IK<DH, H, RNG, SendB>
+impl<DH, H, RNG> IK<DH, H, RNG, SendB<DH::Public>>
 where
     RNG: RngCore + CryptoRng,
     DH: Dh,
     H: Hash,
 {
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &DH::Public {
         &self.state.rs
     }
 
-    pub fn reply(self, mut output: impl Write) -> Result<TransportState<H>, HandshakeStateError> {
+    pub fn reply(
+        self,
+        mut output: impl Write,
+    ) -> Result<TransportState<H, DH::Public>, HandshakeStateError> {
         let Self {
             mut inner,
             state: SendB { re, rs },
@@ -147,17 +147,21 @@ where
         ))
     }
 }
-impl<DH, H, RNG> IK<DH, H, RNG, WaitB>
+impl<DH, H, RNG> IK<DH, H, RNG, WaitB<DH::Public>>
 where
     DH: Dh,
 
     H: Hash,
 {
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &DH::Public {
         &self.state.rs
     }
 
-    pub fn receive(self, s: &DH, input: &[u8]) -> Result<TransportState<H>, HandshakeStateError> {
+    pub fn receive(
+        self,
+        s: &DH,
+        input: &[u8],
+    ) -> Result<TransportState<H, DH::Public>, HandshakeStateError> {
         let Self {
             mut inner,
             state: WaitB { rs },
@@ -184,19 +188,29 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+
     use super::*;
+    #[cfg(target_os = "macos")]
+    use crate::key::secp256r1;
     use crate::{
         key::{curve25519, ed25519, ed25519_extended, ed25519_hd},
         noise::transport_state::tests::test_transport,
     };
     use cryptoxide::{blake2b::Blake2b, blake2s::Blake2s};
 
-    fn establish_handshake<H: Hash, K1: Dh, K2: Dh>(
+    fn establish_handshake<H, K1, K2>(
         rng1: crate::Seed,
         rng2: crate::Seed,
         initiator_s: K1,
         responder_s: K2,
-    ) -> (TransportState<H>, TransportState<H>) {
+    ) -> (TransportState<H, K1::Public>, TransportState<H, K1::Public>)
+    where
+        H: Hash,
+        K1: Dh,
+        K2: Dh<Public = K1::Public>,
+        K1::Public: Debug + PartialEq + Clone,
+    {
         let initiator_key = initiator_s.public();
         let responder_key = responder_s.public();
 
@@ -208,7 +222,7 @@ mod tests {
 
         let mut output = Vec::with_capacity(1024);
         let initiator = initiator
-            .initiate(&initiator_s, responder_key, &mut output)
+            .initiate(&initiator_s, responder_key.clone(), &mut output)
             .expect("initiator sends message A");
         let input = output;
         let responder = responder
@@ -244,7 +258,7 @@ mod tests {
                 let (initiator, responder) =
                     establish_handshake(rng1, rng2, initiator_s, responder_s);
 
-                test_transport::<$hash>(
+                test_transport::<$hash, <$sk1 as Dh>::Public>(
                     initiator,
                     responder,
                     messages_init_to_responder,
@@ -375,6 +389,22 @@ mod tests {
         ed25519_hd_to_ed25519_hd_blake2s,
         ed25519_hd::SecretKey,
         ed25519_hd::SecretKey,
+        Blake2s
+    );
+
+    #[cfg(target_os = "macos")]
+    mk_test!(
+        secp256r1_to_secp256r1_blake2b,
+        secp256r1::P256r1PrivateKey,
+        secp256r1::P256r1PrivateKey,
+        Blake2b
+    );
+
+    #[cfg(target_os = "macos")]
+    mk_test!(
+        secp256r1_to_secp256r1_blake2s,
+        secp256r1::P256r1PrivateKey,
+        secp256r1::P256r1PrivateKey,
         Blake2s
     );
 }
