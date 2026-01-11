@@ -49,7 +49,7 @@ impl<I> HandleReadHalf<I>
 where
     I: AsyncRead,
 {
-    fn new(stream: I, state: TransportReceiveHalf<Blake2b>) -> Self {
+    fn new(stream: I, state: TransportReceiveHalf<Blake2b, PublicKey>) -> Self {
         let stream = FramedRead::new(stream, NoiseEncryptedDecoder::new(state));
         let none = false;
 
@@ -75,7 +75,7 @@ impl<O> HandleWriteHalf<O>
 where
     O: AsyncWrite,
 {
-    fn new(stream: O, state: TransportSendHalf<Blake2b>) -> Self {
+    fn new(stream: O, state: TransportSendHalf<Blake2b, PublicKey>) -> Self {
         let sink = FramedWrite::new(stream, NoiseEncryptedEncoder::new(state));
 
         Self { sink }
@@ -101,7 +101,7 @@ where
     I: AsyncRead + Unpin,
     O: AsyncWrite + Unpin,
 {
-    pub(crate) fn new(stream: I, sink: O, state: TransportState<Blake2b>) -> Self {
+    pub(crate) fn new(stream: I, sink: O, state: TransportState<Blake2b, PublicKey>) -> Self {
         let (tsh, trh) = state.split();
 
         let stream = HandleReadHalf::new(stream, trh);
@@ -142,7 +142,7 @@ where
     ///
     pub async fn open<K, RNG>(rng: RNG, k: &K, rs: PublicKey, reader: I, writer: O) -> Result<Self>
     where
-        K: Dh,
+        K: Dh<Public = PublicKey>,
         RNG: RngCore + CryptoRng,
     {
         let opening = Opening::new(rng, k, rs, reader, writer).await?;

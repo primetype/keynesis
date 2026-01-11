@@ -14,10 +14,10 @@ use keynesis_core::{
 use rand_core::{CryptoRng, RngCore};
 use tokio::io::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
 
-pub struct Opening<I, O, RNG, K = ed25519::SecretKey> {
+pub struct Opening<I, O, RNG, K: Dh = ed25519::SecretKey> {
     reader: I,
     writer: O,
-    state: IK<K, Blake2b, RNG, WaitB>,
+    state: IK<K, Blake2b, RNG, WaitB<K::Public>>,
 }
 
 impl<I, O, RNG, K> Opening<I, O, RNG, K>
@@ -29,14 +29,14 @@ where
     pub(crate) async fn new(
         rng: RNG,
         k: &K,
-        rs: PublicKey,
+        rs: K::Public,
         reader: I,
         mut writer: O,
     ) -> Result<Self> {
         let mut message = HandshakeInitialize::DEFAULT;
         let ik = IK::new(rng, &[]);
 
-        let state = ik
+        let state: IK<_, Blake2b, _, _> = ik
             .initiate(k, rs, message.message_mut())
             .context("Cannot initiate Noise IK handshake")?;
 
@@ -57,7 +57,7 @@ impl<I, O, RNG, K> Opening<I, O, RNG, K>
 where
     I: AsyncRead + Unpin,
     O: AsyncWrite + Unpin,
-    K: Dh,
+    K: Dh<Public = PublicKey>,
     RNG: CryptoRng + RngCore,
 {
     pub(crate) async fn wait(self, k: &K) -> Result<Handle<I, O>> {

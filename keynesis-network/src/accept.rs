@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{
     codec::handshake::{HandshakeInitialize, HandshakeResponse},
     Handle,
@@ -46,7 +48,7 @@ impl<I, O, K, RNG> Accepting<I, O, RNG, K>
 where
     I: AsyncRead + Unpin,
     O: AsyncWrite + Unpin,
-    K: Dh,
+    K: Dh<Public = PublicKey>,
     RNG: CryptoRng + RngCore,
 {
     /// perform the initial handshake with the peer
@@ -65,7 +67,8 @@ where
     ///
     pub async fn accept<F>(self, k: &K, check_id: F) -> Result<Handle<I, O>>
     where
-        F: Fn(&PublicKey) -> bool,
+        F: Fn(&K::Public) -> bool,
+        K::Public: Debug,
     {
         let Self {
             mut reader,
@@ -92,7 +95,7 @@ where
 
         if !check_id(state.remote_public_identity()) {
             bail!(
-                "Rejecting connection with {}",
+                "Rejecting connection with {:?}",
                 state.remote_public_identity()
             )
         }

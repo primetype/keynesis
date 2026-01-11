@@ -19,6 +19,7 @@ use keynesis_core::key::{
     Dh,
 };
 use rand_core::{CryptoRng, RngCore};
+use std::fmt::Debug;
 use std::{
     fmt::{self, Display},
     net::SocketAddr,
@@ -120,7 +121,7 @@ impl Listener {
 impl<RNG, K> Accepting<RNG, K>
 where
     RNG: CryptoRng + RngCore,
-    K: Dh,
+    K: Dh<Public = PublicKey>,
 {
     /// the inbound new connection's remote address
     ///
@@ -148,7 +149,8 @@ where
     #[tracing::instrument(skip(k, check_id), level = "debug")]
     pub async fn handshake<F>(self, k: &K, check_id: F) -> Result<Connection>
     where
-        F: Fn(&PublicKey) -> bool,
+        F: Fn(&K::Public) -> bool,
+        K::Public: Debug,
     {
         let Self { handle, peer_addr } = self;
 
@@ -271,7 +273,7 @@ impl Connection {
     ) -> Result<Self>
     where
         RNG: CryptoRng + RngCore,
-        K: Dh,
+        K: Dh<Public = PublicKey>,
     {
         let stream = TcpStream::connect(peer_addr)
             .await
@@ -306,12 +308,12 @@ impl Connection {
         mut rng: RNG,
         k: &K,
         peer_addr: A,
-        rs: PublicKey,
+        rs: K::Public,
     ) -> Result<Self>
     where
         RNG: RngCore + CryptoRng,
         A: ToSocketAddrs + Display + fmt::Debug,
-        K: Dh,
+        K: Dh<Public = PublicKey>,
     {
         let peer_addrs = lookup_host(&peer_addr)
             .await

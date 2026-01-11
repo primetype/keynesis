@@ -24,7 +24,7 @@ boundaries of the allowed messages.
 [tokio codec]: tokio_util::codec
 */
 pub struct NoiseEncryptedDecoder {
-    noise: TransportReceiveHalf<Blake2b>,
+    noise: TransportReceiveHalf<Blake2b, PublicKey>,
     session: SessionId,
     decode_state: State,
 }
@@ -41,7 +41,7 @@ boundaries of the allowed messages.
 [tokio codec]: tokio_util::codec
 */
 pub struct NoiseEncryptedEncoder {
-    noise: TransportSendHalf<Blake2b>,
+    noise: TransportSendHalf<Blake2b, PublicKey>,
     session: SessionId,
 }
 
@@ -58,7 +58,7 @@ impl NoiseEncryptedEncoder {
     /// create the encoded with the given [`TransportSendHalf`].
     ///
     /// [`TransportSendHalf`]: keynesis::noise::TransportSendHalf
-    pub fn new(noise: TransportSendHalf<Blake2b>) -> Self {
+    pub fn new(noise: TransportSendHalf<Blake2b, PublicKey>) -> Self {
         let session = SessionId::new(*noise.noise_session());
         Self { noise, session }
     }
@@ -78,7 +78,7 @@ impl NoiseEncryptedEncoder {
 }
 
 impl NoiseEncryptedDecoder {
-    pub fn new(noise: TransportReceiveHalf<Blake2b>) -> Self {
+    pub fn new(noise: TransportReceiveHalf<Blake2b, PublicKey>) -> Self {
         let decode_state = State::Head;
         let session = SessionId::new(*noise.noise_session());
         Self {
