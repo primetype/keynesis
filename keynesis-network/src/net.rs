@@ -14,8 +14,9 @@ use crate::{
 use anyhow::{bail, Context as _, Result};
 use bytes::Bytes;
 use futures::prelude::*;
+use keynesis_core::key::PublicKey;
 use keynesis_core::key::{
-    ed25519::{self, PublicKey},
+    ed25519::{self},
     Dh,
 };
 use rand_core::{CryptoRng, RngCore};
@@ -49,20 +50,29 @@ pub struct Listener {
 /// and [`ConnectionReader`]) for more convenient handling of that the protocol
 /// may be available to write data and receive data at different time.
 ///
-pub struct Connection {
-    writer: ConnectionWriter,
-    reader: ConnectionReader,
+pub struct Connection<PK>
+where
+    PK: PublicKey,
+{
+    writer: ConnectionWriter<PK>,
+    reader: ConnectionReader<PK>,
 }
 
 /// writer halve of the authenticated encrypted connection with the peer
-pub struct ConnectionWriter {
-    writer: HandleWriteHalf<OwnedWriteHalf>,
+pub struct ConnectionWriter<PK>
+where
+    PK: PublicKey,
+{
+    writer: HandleWriteHalf<OwnedWriteHalf, PK>,
     peer_addr: SocketAddr,
 }
 
 /// reader halve of the authenticated encrypted connection with the peer
-pub struct ConnectionReader {
-    reader: HandleReadHalf<OwnedReadHalf>,
+pub struct ConnectionReader<PK>
+where
+    PK: PublicKey,
+{
+    reader: HandleReadHalf<OwnedReadHalf, PK>,
     peer_addr: SocketAddr,
 }
 
@@ -72,7 +82,10 @@ pub struct ConnectionReader {
 /// so that we can process the handshake in a separate thread/task and not block
 /// other incoming connections.
 ///
-pub struct Accepting<RNG, K = ed25519::SecretKey> {
+pub struct Accepting<RNG, K = ed25519::SecretKey>
+where
+    K: Dh,
+{
     handle: accept::Accepting<OwnedReadHalf, OwnedWriteHalf, RNG, K>,
     peer_addr: SocketAddr,
 }
@@ -112,7 +125,7 @@ impl Listener {
 
         let (reader, writer) = stream.into_split();
 
-        let handle = Handle::accept(rng, reader, writer);
+        let handle = Handle::<_, _, K::Public>::accept::<K, _>(rng, reader, writer);
 
         Ok(Accepting { handle, peer_addr })
     }
@@ -121,7 +134,7 @@ impl Listener {
 impl<RNG, K> Accepting<RNG, K>
 where
     RNG: CryptoRng + RngCore,
-    K: Dh<Public = PublicKey>,
+    K: Dh,
 {
     /// the inbound new connection's remote address
     ///
@@ -147,10 +160,10 @@ where
     ///
     /// [Noise **IK**]: https://noiseexplorer.com/patterns/IK/
     #[tracing::instrument(skip(k, check_id), level = "debug")]
-    pub async fn handshake<F>(self, k: &K, check_id: F) -> Result<Connection>
+    pub async fn handshake<F>(self, k: &K, check_id: F) -> Result<Connection<K::Public>>
     where
         F: Fn(&K::Public) -> bool,
-        K::Public: Debug,
+        K::Public: Debug + Display,
     {
         let Self { handle, peer_addr } = self;
 
@@ -175,10 +188,13 @@ where
     }
 }
 
-impl ConnectionReader {
+impl<PK> ConnectionReader<PK>
+where
+    PK: PublicKey,
+{
     /// retrieve the public identity of the peer
     ///
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         self.reader.remote_public_identity()
     }
 
@@ -202,10 +218,13 @@ impl ConnectionReader {
     }
 }
 
-impl ConnectionWriter {
+impl<PK> ConnectionWriter<PK>
+where
+    PK: PublicKey,
+{
     /// retrieve the public identity of the peer
     ///
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         self.writer.remote_public_identity()
     }
 
@@ -230,10 +249,13 @@ impl ConnectionWriter {
     }
 }
 
-impl Connection {
+impl<PK> Connection<PK>
+where
+    PK: PublicKey + Debug + Display,
+{
     /// retrieve the public identity of the peer
     ///
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         self.writer.remote_public_identity()
     }
 
@@ -269,11 +291,11 @@ impl Connection {
         rng: RNG,
         k: &K,
         peer_addr: SocketAddr,
-        rs: PublicKey,
+        rs: K::Public,
     ) -> Result<Self>
     where
         RNG: CryptoRng + RngCore,
-        K: Dh<Public = PublicKey>,
+        K: Dh<Public = PK>,
     {
         let stream = TcpStream::connect(peer_addr)
             .await
@@ -313,14 +335,14 @@ impl Connection {
     where
         RNG: RngCore + CryptoRng,
         A: ToSocketAddrs + Display + fmt::Debug,
-        K: Dh<Public = PublicKey>,
+        K: Dh<Public = PK>,
     {
         let peer_addrs = lookup_host(&peer_addr)
             .await
             .context("Cannot connect to remote peer address")?;
 
         for socket_addr in peer_addrs {
-            match Self::connect_to(&mut rng, k, socket_addr, rs).await {
+            match Self::connect_to(&mut rng, k, socket_addr, rs.clone()).await {
                 Ok(connection) => return Ok(connection),
                 Err(error) => {
                     tracing::info!(reason = ?error, "Failed to connect to {} with {}", peer_addr, socket_addr);
@@ -336,14 +358,17 @@ impl Connection {
     ///
     /// this allows to have 2 different independent objects to read or write to/from
     /// the remote peer.
-    pub fn into_parts(self) -> (ConnectionReader, ConnectionWriter) {
+    pub fn into_parts(self) -> (ConnectionReader<PK>, ConnectionWriter<PK>) {
         let Self { reader, writer } = self;
 
         (reader, writer)
     }
 }
 
-impl Stream for Connection {
+impl<PK> Stream for Connection<PK>
+where
+    PK: PublicKey,
+{
     type Item = Result<Bytes>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let connection = self.get_mut();
@@ -351,7 +376,10 @@ impl Stream for Connection {
     }
 }
 
-impl Stream for ConnectionReader {
+impl<PK> Stream for ConnectionReader<PK>
+where
+    PK: PublicKey,
+{
     type Item = Result<Bytes>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let connection = self.get_mut();
@@ -370,19 +398,28 @@ impl Stream for ConnectionReader {
     }
 }
 
-impl stream::FusedStream for ConnectionReader {
+impl<PK> stream::FusedStream for ConnectionReader<PK>
+where
+    PK: PublicKey,
+{
     fn is_terminated(&self) -> bool {
         self.reader.is_terminated()
     }
 }
 
-impl stream::FusedStream for Connection {
+impl<PK> stream::FusedStream for Connection<PK>
+where
+    PK: PublicKey,
+{
     fn is_terminated(&self) -> bool {
         self.reader.is_terminated()
     }
 }
 
-impl Sink<Bytes> for Connection {
+impl<PK> Sink<Bytes> for Connection<PK>
+where
+    PK: PublicKey,
+{
     type Error = anyhow::Error;
 
     fn start_send(self: Pin<&mut Self>, item: Bytes) -> Result<(), Self::Error> {
@@ -406,7 +443,10 @@ impl Sink<Bytes> for Connection {
     }
 }
 
-impl Sink<Bytes> for ConnectionWriter {
+impl<PK> Sink<Bytes> for ConnectionWriter<PK>
+where
+    PK: PublicKey,
+{
     type Error = anyhow::Error;
 
     fn start_send(self: Pin<&mut Self>, item: Bytes) -> Result<(), Self::Error> {
@@ -430,7 +470,10 @@ impl Sink<Bytes> for ConnectionWriter {
     }
 }
 
-impl<RNG, K> fmt::Debug for Accepting<RNG, K> {
+impl<RNG, K> fmt::Debug for Accepting<RNG, K>
+where
+    K: Dh,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Accepting")
             .field("remote_address", &self.peer_addr)
@@ -438,7 +481,10 @@ impl<RNG, K> fmt::Debug for Accepting<RNG, K> {
     }
 }
 
-impl fmt::Debug for Connection {
+impl<PK> fmt::Debug for Connection<PK>
+where
+    PK: PublicKey + Debug + Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Connection")
             .field("remote_address", &self.remote_address())

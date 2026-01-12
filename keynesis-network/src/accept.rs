@@ -8,7 +8,7 @@ use anyhow::{bail, Context as _, Result};
 use keynesis_core::{
     hash::Blake2b,
     key::{
-        ed25519::{self, PublicKey},
+        ed25519::{self},
         Dh,
     },
     noise::{ik::A, IK},
@@ -24,7 +24,10 @@ use tokio::io::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
 ///
 /// This object offers the necessary tooling to identify the initiator so it is
 /// possible to deny the connection early enough (see [Accepting::accept])
-pub struct Accepting<I, O, RNG, K = ed25519::SecretKey> {
+pub struct Accepting<I, O, RNG, K = ed25519::SecretKey>
+where
+    K: Dh,
+{
     reader: I,
     writer: O,
     state: IK<K, Blake2b, RNG, A>,
@@ -48,7 +51,7 @@ impl<I, O, K, RNG> Accepting<I, O, RNG, K>
 where
     I: AsyncRead + Unpin,
     O: AsyncWrite + Unpin,
-    K: Dh<Public = PublicKey>,
+    K: Dh,
     RNG: CryptoRng + RngCore,
 {
     /// perform the initial handshake with the peer
@@ -65,7 +68,7 @@ where
     /// This function may fail for IO operations as well as for processing the
     /// noise handshake.
     ///
-    pub async fn accept<F>(self, k: &K, check_id: F) -> Result<Handle<I, O>>
+    pub async fn accept<F>(self, k: &K, check_id: F) -> Result<Handle<I, O, K::Public>>
     where
         F: Fn(&K::Public) -> bool,
         K::Public: Debug,

@@ -6,7 +6,7 @@ use anyhow::{bail, Context as _, Result};
 use keynesis_core::{
     hash::Blake2b,
     key::{
-        ed25519::{self, PublicKey},
+        ed25519::{self},
         Dh,
     },
     noise::{ik::WaitB, IK},
@@ -57,10 +57,10 @@ impl<I, O, RNG, K> Opening<I, O, RNG, K>
 where
     I: AsyncRead + Unpin,
     O: AsyncWrite + Unpin,
-    K: Dh<Public = PublicKey>,
+    K: Dh,
     RNG: CryptoRng + RngCore,
 {
-    pub(crate) async fn wait(self, k: &K) -> Result<Handle<I, O>> {
+    pub(crate) async fn wait(self, k: &K) -> Result<Handle<I, O, K::Public>> {
         let Self {
             mut reader,
             writer,

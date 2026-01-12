@@ -8,7 +8,7 @@ use bytes::{Bytes, BytesMut};
 use futures::{prelude::*, stream::FusedStream as _};
 use keynesis_core::{
     hash::Blake2b,
-    key::{ed25519::PublicKey, Dh},
+    key::{Dh, PublicKey},
     noise::{TransportReceiveHalf, TransportSendHalf, TransportState},
 };
 use rand_core::{CryptoRng, RngCore};
@@ -25,31 +25,41 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 /// management of the ins and outs of the connections.
 ///
 /// see [`Handle::split`] for more information
-pub struct Handle<I, O> {
-    stream: HandleReadHalf<I>,
-    sink: HandleWriteHalf<O>,
+pub struct Handle<I, O, PK>
+where
+    PK: PublicKey,
+{
+    stream: HandleReadHalf<I, PK>,
+    sink: HandleWriteHalf<O, PK>,
 }
 
 /// the reading half of the encrypted connection
 ///
 /// see [`Handle::split`] for more information
-pub struct HandleReadHalf<I> {
+pub struct HandleReadHalf<I, PK>
+where
+    PK: PublicKey,
+{
     none: bool,
-    stream: FramedRead<I, NoiseEncryptedDecoder>,
+    stream: FramedRead<I, NoiseEncryptedDecoder<PK>>,
 }
 
 /// the writing half of the encrypted connection
 ///
 /// see [`Handle::split`] for more information
-pub struct HandleWriteHalf<O> {
-    sink: FramedWrite<O, NoiseEncryptedEncoder>,
+pub struct HandleWriteHalf<O, PK>
+where
+    PK: PublicKey,
+{
+    sink: FramedWrite<O, NoiseEncryptedEncoder<PK>>,
 }
 
-impl<I> HandleReadHalf<I>
+impl<I, PK> HandleReadHalf<I, PK>
 where
+    PK: PublicKey,
     I: AsyncRead,
 {
-    fn new(stream: I, state: TransportReceiveHalf<Blake2b, PublicKey>) -> Self {
+    fn new(stream: I, state: TransportReceiveHalf<Blake2b, PK>) -> Self {
         let stream = FramedRead::new(stream, NoiseEncryptedDecoder::new(state));
         let none = false;
 
@@ -58,7 +68,7 @@ where
 
     /// retrieve the public identity of the peer
     ///
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         self.stream.decoder().remote_public_identity()
     }
 
@@ -71,11 +81,12 @@ where
     }
 }
 
-impl<O> HandleWriteHalf<O>
+impl<O, PK> HandleWriteHalf<O, PK>
 where
     O: AsyncWrite,
+    PK: PublicKey,
 {
-    fn new(stream: O, state: TransportSendHalf<Blake2b, PublicKey>) -> Self {
+    fn new(stream: O, state: TransportSendHalf<Blake2b, PK>) -> Self {
         let sink = FramedWrite::new(stream, NoiseEncryptedEncoder::new(state));
 
         Self { sink }
@@ -83,7 +94,7 @@ where
 
     /// retrieve the public identity of the peer
     ///
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         self.sink.encoder().remote_public_identity()
     }
 
@@ -96,12 +107,13 @@ where
     }
 }
 
-impl<I, O> Handle<I, O>
+impl<I, O, PK> Handle<I, O, PK>
 where
     I: AsyncRead + Unpin,
     O: AsyncWrite + Unpin,
+    PK: PublicKey,
 {
-    pub(crate) fn new(stream: I, sink: O, state: TransportState<Blake2b, PublicKey>) -> Self {
+    pub(crate) fn new(stream: I, sink: O, state: TransportState<Blake2b, PK>) -> Self {
         let (tsh, trh) = state.split();
 
         let stream = HandleReadHalf::new(stream, trh);
@@ -116,7 +128,7 @@ where
     /// because the connection is bidirectional/duplex so it is more convenient to handle
     /// the protocol if the 2 halves are split. However, if you are only using the
     /// synchronous you can keep the [`Handle`] as it is.
-    pub fn split(self) -> (HandleReadHalf<I>, HandleWriteHalf<O>) {
+    pub fn split(self) -> (HandleReadHalf<I, PK>, HandleWriteHalf<O, PK>) {
         (self.stream, self.sink)
     }
 
@@ -140,9 +152,9 @@ where
     /// We will generate an ephemeral key, the `rng` will do that at the appropriate
     /// time.
     ///
-    pub async fn open<K, RNG>(rng: RNG, k: &K, rs: PublicKey, reader: I, writer: O) -> Result<Self>
+    pub async fn open<K, RNG>(rng: RNG, k: &K, rs: PK, reader: I, writer: O) -> Result<Self>
     where
-        K: Dh<Public = PublicKey>,
+        K: Dh<Public = PK>,
         RNG: RngCore + CryptoRng,
     {
         let opening = Opening::new(rng, k, rs, reader, writer).await?;
@@ -152,7 +164,7 @@ where
     /// retrieve the public identity of the peer
     ///
     #[allow(dead_code)]
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         self.stream.remote_public_identity()
     }
 
@@ -165,10 +177,11 @@ where
     }
 }
 
-impl<I, O> Stream for Handle<I, O>
+impl<I, O, PK> Stream for Handle<I, O, PK>
 where
     I: AsyncRead + Unpin,
     O: Unpin,
+    PK: PublicKey,
 {
     type Item = Result<BytesMut>;
 
@@ -179,9 +192,10 @@ where
     }
 }
 
-impl<I> Stream for HandleReadHalf<I>
+impl<I, PK> Stream for HandleReadHalf<I, PK>
 where
     I: AsyncRead + Unpin,
+    PK: PublicKey,
 {
     type Item = Result<BytesMut>;
 
@@ -203,29 +217,32 @@ where
     }
 }
 
-impl<I> stream::FusedStream for HandleReadHalf<I>
+impl<I, PK> stream::FusedStream for HandleReadHalf<I, PK>
 where
     I: AsyncRead + Unpin,
+    PK: PublicKey,
 {
     fn is_terminated(&self) -> bool {
         self.none
     }
 }
 
-impl<I, O> stream::FusedStream for Handle<I, O>
+impl<I, O, PK> stream::FusedStream for Handle<I, O, PK>
 where
     I: AsyncRead + Unpin,
     O: Unpin,
+    PK: PublicKey,
 {
     fn is_terminated(&self) -> bool {
         self.stream.is_terminated()
     }
 }
 
-impl<I, O> Sink<Bytes> for Handle<I, O>
+impl<I, O, PK> Sink<Bytes> for Handle<I, O, PK>
 where
     I: Unpin,
     O: AsyncWrite + Unpin,
+    PK: PublicKey,
 {
     type Error = anyhow::Error;
 
@@ -250,9 +267,10 @@ where
     }
 }
 
-impl<O> Sink<Bytes> for HandleWriteHalf<O>
+impl<O, PK> Sink<Bytes> for HandleWriteHalf<O, PK>
 where
     O: AsyncWrite + Unpin,
+    PK: PublicKey,
 {
     type Error = anyhow::Error;
 

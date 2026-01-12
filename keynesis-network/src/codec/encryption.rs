@@ -2,7 +2,7 @@ use crate::SessionId;
 use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
 use keynesis_core::{
     hash::Blake2b,
-    key::ed25519::PublicKey,
+    key::PublicKey,
     noise::{TransportReceiveHalf, TransportSendHalf},
 };
 use std::io;
@@ -23,8 +23,8 @@ boundaries of the allowed messages.
 
 [tokio codec]: tokio_util::codec
 */
-pub struct NoiseEncryptedDecoder {
-    noise: TransportReceiveHalf<Blake2b, PublicKey>,
+pub struct NoiseEncryptedDecoder<PK: PublicKey> {
+    noise: TransportReceiveHalf<Blake2b, PK>,
     session: SessionId,
     decode_state: State,
 }
@@ -40,8 +40,8 @@ boundaries of the allowed messages.
 
 [tokio codec]: tokio_util::codec
 */
-pub struct NoiseEncryptedEncoder {
-    noise: TransportSendHalf<Blake2b, PublicKey>,
+pub struct NoiseEncryptedEncoder<PK: PublicKey> {
+    noise: TransportSendHalf<Blake2b, PK>,
     session: SessionId,
 }
 
@@ -54,11 +54,14 @@ enum State {
     Head,
 }
 
-impl NoiseEncryptedEncoder {
+impl<PK> NoiseEncryptedEncoder<PK>
+where
+    PK: PublicKey,
+{
     /// create the encoded with the given [`TransportSendHalf`].
     ///
     /// [`TransportSendHalf`]: keynesis::noise::TransportSendHalf
-    pub fn new(noise: TransportSendHalf<Blake2b, PublicKey>) -> Self {
+    pub fn new(noise: TransportSendHalf<Blake2b, PK>) -> Self {
         let session = SessionId::new(*noise.noise_session());
         Self { noise, session }
     }
@@ -72,13 +75,16 @@ impl NoiseEncryptedEncoder {
     /// the two peers are going to securely share their public keys in
     /// order to authenticate to each others.
     ///
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         self.noise.remote_public_identity()
     }
 }
 
-impl NoiseEncryptedDecoder {
-    pub fn new(noise: TransportReceiveHalf<Blake2b, PublicKey>) -> Self {
+impl<PK> NoiseEncryptedDecoder<PK>
+where
+    PK: PublicKey,
+{
+    pub fn new(noise: TransportReceiveHalf<Blake2b, PK>) -> Self {
         let decode_state = State::Head;
         let session = SessionId::new(*noise.noise_session());
         Self {
@@ -97,7 +103,7 @@ impl NoiseEncryptedDecoder {
     /// the two peers are going to securely share their public keys in
     /// order to authenticate to each others.
     ///
-    pub fn remote_public_identity(&self) -> &PublicKey {
+    pub fn remote_public_identity(&self) -> &PK {
         self.noise.remote_public_identity()
     }
 
@@ -143,7 +149,10 @@ impl NoiseEncryptedDecoder {
     }
 }
 
-impl Decoder for NoiseEncryptedDecoder {
+impl<PK> Decoder for NoiseEncryptedDecoder<PK>
+where
+    PK: PublicKey,
+{
     type Item = BytesMut;
     type Error = io::Error;
 
@@ -170,7 +179,10 @@ impl Decoder for NoiseEncryptedDecoder {
     }
 }
 
-impl Encoder<Bytes> for NoiseEncryptedEncoder {
+impl<PK> Encoder<Bytes> for NoiseEncryptedEncoder<PK>
+where
+    PK: PublicKey,
+{
     type Error = io::Error;
     fn encode(&mut self, item: Bytes, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let n = item.len();
